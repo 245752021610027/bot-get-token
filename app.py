@@ -382,7 +382,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             mapped_proxies.append(proxies[i % len(proxies)])
 
         state["proxies"] = mapped_proxies
-        await update.message.reply_text("🚀 Đang tiến hành xử lý tài khoản với đa luồng (Tối đa 7 luồng), vui lòng đợi...")
+        await update.message.reply_text("🚀 Đang tiến hành xử lý tài khoản với đa luồng (Tối đa 15 luồng), vui lòng đợi...")
         await process_run(update, context, user_id, proxies=mapped_proxies)
 
 def worker_task(acc_line, proxy_line, has_2fa):
@@ -435,7 +435,7 @@ async def process_run(update: Update, context: ContextTypes.DEFAULT_TYPE, user_i
     results_text = "📊 **KẾT QUẢ GET TOKEN:**\n\n"
     username_str = f"@{user.username}" if user.username else f"{user.first_name} (ID: {user.id})"
 
-    max_workers = min(7, len(accounts))
+    max_workers = min(15, len(accounts))
     
     successful_accounts = []
     successful_proxies = []
