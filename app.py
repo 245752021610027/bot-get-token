@@ -335,7 +335,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         for chat_id in users:
             try:
-                await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
+                # Đã cập nhật tiêu đề thông báo từ bot gettoken theo yêu cầu
+                broadcast_msg = f"📢 THÔNG BÁO TỪ BOT GETTOKEN\n━━━━━━━━━━━━━━━━━━\n\n{text}"
+                await context.bot.send_message(chat_id=chat_id, text=broadcast_msg, parse_mode="Markdown")
                 success_count += 1
                 time.sleep(0.1)
             except:
