@@ -274,7 +274,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🔑 Get Token", callback_data="menu_gettoken")],
         [InlineKeyboardButton("🛒 Mua Clone", url="https://t.me/clonegiareok_bot")],
-        [InlineKeyboardButton("📞 Liên hệ Admin", url="https://t.me/phucvan99")]
+        [InlineKeyboardButton("📞 Liên hệ Admin", url="https://t.me/phucvan99")],
         [InlineKeyboardButton("📞 tham gia nhóm nhận thông báo", url="https://t.me/+gJqK8zY7vk4yMjk1")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
