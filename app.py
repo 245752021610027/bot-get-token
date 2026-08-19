@@ -21,6 +21,7 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
+from telegram.error import TelegramError
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
@@ -40,6 +41,9 @@ def run_flask():
 TELEGRAM_BOT_TOKEN = "8694132202:AAGdtE43NdakjEip6ZM5IAVvImRcYwoRbrM"
 ADMIN_TELEGRAM_ID = 8800581554
 USER_IDS_FILE = "users.json"
+REQUIRED_GROUP_USERNAME = "@LSOYH-KICvMzMTY9" # Hoặc bạn có thể dùng Chat ID dạng số của nhóm (ví dụ: -100xxxxxxxxxx)
+# Lưu ý: Với link mời dạng kín như https://t.me/+LSOYH-KICvMzMTY9, cách tốt nhất là dùng Chat ID chuẩn của nhóm (ví dụ: -100123456789) vào biến dưới đây:
+REQUIRED_GROUP_ID = -1004435579756 # <-- Thay thế bằng Chat ID thực tế của nhóm bạn (bắt đầu bằng -100)
 
 def load_users():
     try:
@@ -51,6 +55,20 @@ def load_users():
 def save_users(users_set):
     with open(USER_IDS_FILE, "w") as f:
         json.dump(list(users_set), f)
+
+# ================= HÀM KIỂM TRA THÀNH VIÊN NHÓM =================
+async def check_user_in_group(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    try:
+        # Lấy thông tin trạng thái của user trong nhóm
+        member = await context.bot.get_chat_member(chat_id=REQUIRED_GROUP_ID, user_id=user_id)
+        # Các trạng thái được coi là thành viên đang tham gia
+        if member.status in ['member', 'administrator', 'creator']:
+            return True
+        return False
+    except Exception as e:
+        print(f"Lỗi kiểm tra nhóm: {e}")
+        # Nếu bot chưa được thêm vào nhóm hoặc chưa làm admin, hàm sẽ văng lỗi
+        return False
 
 # ================= XỬ LÝ PROXY & FACEBOOK LOGIN =================
 def format_proxy(proxy_str):
@@ -72,7 +90,6 @@ def format_proxy(proxy_str):
     elif len(parts) == 2:
         return f"http://{proxy_str}"
     return f"http://{proxy_str}"
-
 
 class FacebookPasswordEncryptor:
     @staticmethod
@@ -117,7 +134,6 @@ class FacebookPasswordEncryptor:
             return f"#PWD_FB4A:2:{current_time}:{encoded}"
         except Exception as e:
             raise Exception(f"Lỗi mã hóa mật khẩu: {e}")
-
 
 class FacebookLogin:
     API_URL = "https://b-graph.facebook.com/auth/login"
@@ -210,16 +226,52 @@ class FacebookLogin:
 # ================= QUẢN LÝ TRẠNG THÁI (USER CONTEXT) =================
 user_states = {}
 
+# Trạng thái ghi nhớ người dùng đã từng thông báo "đã tham gia nhóm" chưa để tránh spam thông báo liên tục
+notified_joined = set()
+
 # ================= TELEGRAM BOT HANDLERS =================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    user_id = user.id
+
+    # 1. Kiểm tra xem người dùng đã tham gia nhóm chưa
+    is_member = await check_user_in_group(user_id, context)
+
+    if not is_member:
+        # Nếu chưa tham gia nhóm, xóa trạng thái thông báo cũ nếu có và gửi yêu cầu tham gia
+        if user_id in notified_joined:
+            notified_joined.remove(user_id)
+
+        keyboard = [
+            [InlineKeyboardButton("🔗 Tham gia nhóm ngay", url="https://t.me/+LSOYH-KICvMzMTY9")],
+            [InlineKeyboardButton("🔄 Kiểm tra lại", callback_data="check_membership")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        text = (
+            f"⚠️ **Bạn chưa đủ điều kiện sử dụng bot!**\n\n"
+            f"Vui lòng tham gia nhóm [tại đây](https://t.me/+LSOYH-KICvMzMTY9) để có thể tiếp tục sử dụng bot."
+        )
+        if update.message:
+            await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown", disable_web_page_preview=True)
+        elif update.callback_query:
+            await update.callback_query.message.edit_text(text, reply_markup=reply_markup, parse_mode="Markdown", disable_web_page_preview=True)
+        return
+
+    # 2. Nếu đã tham gia nhóm thành công
+    if user_id not in notified_joined:
+        notified_joined.add(user_id)
+        if update.message:
+            await update.message.reply_text("✅ Bạn đã tham gia nhóm thành công! Bây giờ bạn có thể sử dụng bot.")
+        elif update.callback_query:
+            await update.callback_query.message.reply_text("✅ Bạn đã tham gia nhóm thành công! Bây giờ bạn có thể sử dụng bot.")
+
     users = load_users()
-    users.add(update.effective_chat.id)
+    users.add(user_id)
     save_users(users)
     
-    if user.id in user_states:
-        del user_states[user.id]
+    if user_id in user_states:
+        del user_states[user_id]
 
     keyboard = [
         [InlineKeyboardButton("🔑 Get Token", callback_data="menu_gettoken")],
@@ -255,6 +307,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
+
+    # Xử lý riêng nút bấm kiểm tra tham gia nhóm
+    if query.data == "check_membership":
+        await start(update, context)
+        return
+
+    # **BẢO VỆ TẤT CẢ CÁC NÚT KHÁC:** Kiểm tra lại nếu người dùng đã rời nhóm thì khóa chức năng ngay lập tức
+    is_member = await check_user_in_group(user_id, context)
+    if not is_member:
+        if user_id in notified_joined:
+            notified_joined.remove(user_id)
+        
+        keyboard = [
+            [InlineKeyboardButton("🔗 Tham gia nhóm ngay", url="https://t.me/+LSOYH-KICvMzMTY9")],
+            [InlineKeyboardButton("🔄 Kiểm tra lại", callback_data="check_membership")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.edit_text(
+            "⚠️ **Bạn đã rời nhóm nên tính năng này đã bị khóa!**\n\nVui lòng tham gia lại nhóm để tiếp tục sử dụng.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
 
     if query.data == "menu_gettoken":
         keyboard = [
@@ -313,11 +388,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
-    text = update.message.text.strip()
+
+    # **BẢO VỆ TIN NHẮN:** Kiểm tra thành viên nhóm trước khi xử lý tin nhắn nhập liệu
+    is_member = await check_user_in_group(user_id, context)
+    if not is_member:
+        if user_id in notified_joined:
+            notified_joined.remove(user_id)
+        
+        keyboard = [
+            [InlineKeyboardButton("🔗 Tham gia nhóm ngay", url="https://t.me/+LSOYH-KICvMzMTY9")],
+            [InlineKeyboardButton("🔄 Kiểm tra lại", callback_data="check_membership")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "⚠️ **Bạn đã rời nhóm nên tính năng đã bị khóa!**\n\nVui lòng tham gia lại nhóm để tiếp tục sử dụng.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return
 
     if user_id not in user_states:
         return
 
+    text = update.message.text.strip()
     state = user_states[user_id]
     step = state.get("step")
 
@@ -335,7 +428,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         for chat_id in users:
             try:
-                # Đã cập nhật tiêu đề thông báo từ bot gettoken theo yêu cầu
                 broadcast_msg = f"📢 THÔNG BÁO TỪ BOT GETTOKEN\n━━━━━━━━━━━━━━━━━━\n\n{text}"
                 await context.bot.send_message(chat_id=chat_id, text=broadcast_msg, parse_mode="Markdown")
                 success_count += 1
@@ -432,7 +524,8 @@ async def process_run(update: Update, context: ContextTypes.DEFAULT_TYPE, user_i
     accounts = state["accounts"]
     has_2fa = state["has_2fa"]
     
-    del user_states[user_id]
+    if user_id in user_states:
+        del user_states[user_id]
 
     results_text = "📊 **KẾT QUẢ GET TOKEN:**\n\n"
     username_str = f"@{user.username}" if user.username else f"{user.first_name} (ID: {user.id})"
@@ -504,14 +597,12 @@ def main():
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-    print("🤖 Bot Telegram đã sẵn sàng hoạt động với Menu, Quản trị Admin, Phân bổ Proxy và Đa luồng...")
+    print("🤖 Bot Telegram đã sẵn sàng hoạt động với kiểm tra nhóm...")
     app.run_polling()
 
 if __name__ == '__main__':
-    # Chạy Flask Server ở luồng phụ để Render nhận diện port thành công
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
 
-    # Chạy Bot Telegram ở luồng chính
     main()
