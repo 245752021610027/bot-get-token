@@ -41,9 +41,8 @@ def run_flask():
 TELEGRAM_BOT_TOKEN = "8694132202:AAGdtE43NdakjEip6ZM5IAVvImRcYwoRbrM"
 ADMIN_TELEGRAM_ID = 8800581554
 USER_IDS_FILE = "users.json"
-REQUIRED_GROUP_USERNAME = "@LSOYH-KICvMzMTY9" # Hoặc bạn có thể dùng Chat ID dạng số của nhóm (ví dụ: -100xxxxxxxxxx)
-# Lưu ý: Với link mời dạng kín như https://t.me/+LSOYH-KICvMzMTY9, cách tốt nhất là dùng Chat ID chuẩn của nhóm (ví dụ: -100123456789) vào biến dưới đây:
-REQUIRED_GROUP_ID = -1004435579756 # <-- Thay thế bằng Chat ID thực tế của nhóm bạn (bắt đầu bằng -100)
+REQUIRED_GROUP_LINK = "https://t.me/+gJqK8zY7vk4yMjk1"
+REQUIRED_GROUP_ID = -1004435579756 # Chat ID thực tế của nhóm
 
 def load_users():
     try:
@@ -58,6 +57,10 @@ def save_users(users_set):
 
 # ================= HÀM KIỂM TRA THÀNH VIÊN NHÓM =================
 async def check_user_in_group(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    # Nếu là Admin thì luôn được phép đi qua mà không cần gia nhập nhóm
+    if user_id == ADMIN_TELEGRAM_ID:
+        return True
+        
     try:
         # Lấy thông tin trạng thái của user trong nhóm
         member = await context.bot.get_chat_member(chat_id=REQUIRED_GROUP_ID, user_id=user_id)
@@ -67,7 +70,7 @@ async def check_user_in_group(user_id: int, context: ContextTypes.DEFAULT_TYPE) 
         return False
     except Exception as e:
         print(f"Lỗi kiểm tra nhóm: {e}")
-        # Nếu bot chưa được thêm vào nhóm hoặc chưa làm admin, hàm sẽ văng lỗi
+        # Trả về False để chặn nếu có lỗi hoặc bot chưa có quyền Admin
         return False
 
 # ================= XỬ LÝ PROXY & FACEBOOK LOGIN =================
@@ -225,8 +228,6 @@ class FacebookLogin:
 
 # ================= QUẢN LÝ TRẠNG THÁI (USER CONTEXT) =================
 user_states = {}
-
-# Trạng thái ghi nhớ người dùng đã từng thông báo "đã tham gia nhóm" chưa để tránh spam thông báo liên tục
 notified_joined = set()
 
 # ================= TELEGRAM BOT HANDLERS =================
@@ -235,22 +236,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
 
-    # 1. Kiểm tra xem người dùng đã tham gia nhóm chưa
     is_member = await check_user_in_group(user_id, context)
 
     if not is_member:
-        # Nếu chưa tham gia nhóm, xóa trạng thái thông báo cũ nếu có và gửi yêu cầu tham gia
         if user_id in notified_joined:
             notified_joined.remove(user_id)
 
         keyboard = [
-            [InlineKeyboardButton("🔗 Tham gia nhóm ngay", url="https://t.me/+LSOYH-KICvMzMTY9")],
+            [InlineKeyboardButton("🔗 Tham gia nhóm ngay", url=REQUIRED_GROUP_LINK)],
             [InlineKeyboardButton("🔄 Kiểm tra lại", callback_data="check_membership")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         text = (
             f"⚠️ **Bạn chưa đủ điều kiện sử dụng bot!**\n\n"
-            f"Vui lòng tham gia nhóm [tại đây](https://t.me/+LSOYH-KICvMzMTY9) để có thể tiếp tục sử dụng bot."
+            f"Vui lòng tham gia nhóm [tại đây]({REQUIRED_GROUP_LINK}) để có thể tiếp tục sử dụng bot."
         )
         if update.message:
             await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown", disable_web_page_preview=True)
@@ -258,7 +257,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.callback_query.message.edit_text(text, reply_markup=reply_markup, parse_mode="Markdown", disable_web_page_preview=True)
         return
 
-    # 2. Nếu đã tham gia nhóm thành công
     if user_id not in notified_joined:
         notified_joined.add(user_id)
         if update.message:
@@ -308,19 +306,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = query.from_user.id
 
-    # Xử lý riêng nút bấm kiểm tra tham gia nhóm
     if query.data == "check_membership":
         await start(update, context)
         return
 
-    # **BẢO VỆ TẤT CẢ CÁC NÚT KHÁC:** Kiểm tra lại nếu người dùng đã rời nhóm thì khóa chức năng ngay lập tức
     is_member = await check_user_in_group(user_id, context)
     if not is_member:
         if user_id in notified_joined:
             notified_joined.remove(user_id)
         
         keyboard = [
-            [InlineKeyboardButton("🔗 Tham gia nhóm ngay", url="https://t.me/+LSOYH-KICvMzMTY9")],
+            [InlineKeyboardButton("🔗 Tham gia nhóm ngay", url=REQUIRED_GROUP_LINK)],
             [InlineKeyboardButton("🔄 Kiểm tra lại", callback_data="check_membership")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -338,7 +334,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.edit_text("📌 **Chọn loại tài khoản bạn muốn Get Token:**", reply_markup=reply_markup, parse_mode="Markdown")
+        await query.message.edit_text("📌 **Chọn loại tài khoản muốn Get Token:**", reply_markup=reply_markup, parse_mode="Markdown")
 
     elif query.data == "menu_back":
         await start(update, context)
@@ -389,14 +385,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
 
-    # **BẢO VỆ TIN NHẮN:** Kiểm tra thành viên nhóm trước khi xử lý tin nhắn nhập liệu
     is_member = await check_user_in_group(user_id, context)
     if not is_member:
         if user_id in notified_joined:
             notified_joined.remove(user_id)
         
         keyboard = [
-            [InlineKeyboardButton("🔗 Tham gia nhóm ngay", url="https://t.me/+LSOYH-KICvMzMTY9")],
+            [InlineKeyboardButton("🔗 Tham gia nhóm ngay", url=REQUIRED_GROUP_LINK)],
             [InlineKeyboardButton("🔄 Kiểm tra lại", callback_data="check_membership")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
