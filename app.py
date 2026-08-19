@@ -235,6 +235,27 @@ notified_joined = set()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
+    chat = update.effective_chat
+
+    # Chặn nếu gọi lệnh /start trong nhóm chat chung
+    if chat.type in ["group", "supergroup"]:
+        bot_username = context.bot.username
+        private_link = f"https://t.me/{bot_username}?start=start"
+        
+        keyboard = [
+            [InlineKeyboardButton("💬 Nhắn tin riêng với Bot", url=private_link)]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        text = (
+            f"⚠️ **Xin chào {user.first_name}!**\n\n"
+            "Vui lòng **không sử dụng bot trong nhóm chat chung** để tránh bị lộ thông tin tài khoản (UID, Mật khẩu, Cookie).\n\n"
+            "👉 Hãy bấm vào nút bên dưới để chuyển sang khung chat riêng với bot nhé!"
+        )
+        
+        if update.message:
+            await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        return
 
     is_member = await check_user_in_group(user_id, context)
 
