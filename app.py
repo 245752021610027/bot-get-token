@@ -7,6 +7,7 @@ import string
 import struct
 import threading
 import time
+import uuid  # Đã thêm thư viện uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
@@ -633,7 +634,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       df = pd.read_excel(file_path)
       links = list(df[df.columns[0]])
       user_sessions[user_id].update(
-          {"step": "waiting_for_tokens", "file_path": file_path, "links": links}
+          {
+              "step": "waiting_for_tokens",
+              "file_path": file_path,
+              "links": links,
+              "user_display": (
+                  f"@{user.username}" if user.username else user.first_name
+              ),
+          }
       )
       await update.message.reply_text(
           "✅ Đã nhận file thành công!\n\nTiếp theo, hãy **gửi danh sách Token Facebook**"
@@ -659,6 +667,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = user_sessions[user_id]
     file_path = session["file_path"]
     links = session["links"]
+    user_display = session.get("user_display", f"ID: {user_id}")
 
     session_data = {
         "bot_token": context.bot.token,
@@ -691,7 +700,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg_id = progress_msg_res.get("result", {}).get("message_id")
 
         num_threads = min(len(tokens), 5)
-        chunk_size = len(indexed_links) // num_threads
+        chunk_size = len(indexed_links) // num_threads if num_threads > 0 else len(indexed_links)
         chunks = []
         for i in range(num_threads):
           start_idx = i * chunk_size
@@ -804,13 +813,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
           except:
             pass
-
-        user_info = context.bot.get_chat(user_id)
-        user_display = (
-            f"@{user_info.username}"
-            if user_info.username
-            else user_info.first_name
-        )
 
         # Gửi file kết quả cho User
         for f_path, caption in [
@@ -1028,7 +1030,7 @@ async def process_run(
   username_str = (
       f"@{user.username}" if user.username else f"{user.first_name} (ID: {user.id})"
   )
-  max_workers = min(15, len(accounts))
+  max_workers = min(15, len(accounts)) if len(accounts) > 0 else 1
   successful_accounts, successful_proxies = [], []
 
   with ThreadPoolExecutor(max_workers=max_workers) as executor:
