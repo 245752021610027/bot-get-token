@@ -45,7 +45,7 @@ TELEGRAM_BOT_TOKEN = "8694132202:AAGdtE43NdakjEip6ZM5IAVvImRcYwoRbrM"
 ADMIN_TELEGRAM_ID = 8800581554
 USER_IDS_FILE = "users.json"
 REQUIRED_GROUP_LINK = "https://t.me/+gJqK8zY7vk4yMjk1"
-REQUIRED_GROUP_ID = -1004435579756  # Chat ID thực tế của nhóm ok
+REQUIRED_GROUP_ID = -1004435579756  # Chat ID thực tế của nhóm
 
 user_sessions = {}
 
@@ -643,7 +643,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       await update.message.reply_text(f"❌ Lỗi đọc file Excel: {e}")
     return
 
-  # Xử lý nhập Token trong Check Cmt
+  # Xử lý nhập Token trong Check Cmt và chạy tiến trình
   if user_id in user_sessions and user_sessions[user_id].get(
       "step"
   ) == "waiting_for_tokens":
@@ -666,15 +666,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "lock": threading.Lock(),
     }
     user_sessions[user_id].update(session_data)
-    await update.message.reply_text(
-        "🚀 Đang tiến hành check comment ẩn/hiện, vui lòng đợi..."
-    )
 
     def run_checking_process():
       try:
         df_original = pd.read_excel(file_path)
-        link_column_name = df_original.columns[0]
         indexed_links = list(enumerate(links))
+        total_links = len(indexed_links)
+
+        # Gửi tin nhắn thanh tiến trình ban đầu
+        progress_msg_res = requests.post(
+            f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
+            json={
+                "chat_id": user_id,
+                "text": (
+                    "⏳ **Đang tiến hành check comment...**\n"
+                    "🔄 Tiến độ: `[░░░░░░░░░░] 0%`\n"
+                    f"📊 Đã check: `0/{total_links}`\n"
+                    "🟢 Còn hiện: `0` | 🔴 Đã ẩn/xóa: `0`"
+                ),
+                "parse_mode": "Markdown",
+            },
+        ).json()
+        
+        msg_id = progress_msg_res.get("result", {}).get("message_id")
 
         num_threads = min(len(tokens), 5)
         chunk_size = len(indexed_links) // num_threads
@@ -694,6 +708,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "lock": threading.Lock(),
         }
         threads = []
+
+        # Luồng cập nhật thanh tiến trình liên tục theo thời gian thực
+        stop_progress_event = threading.Event()
+        def update_progress_bar():
+          last_checked = -1
+          while not stop_progress_event.is_set():
+            with stats_counter["lock"]:
+              current_checked = stats_counter["checked"]
+              current_hien = stats_counter["hien"]
+              current_an = stats_counter["an"]
+            
+            if current_checked != last_checked and msg_id:
+              last_checked = current_checked
+              percent = int((current_checked / total_links) * 100) if total_links > 0 else 0
+              filled_blocks = int(percent / 10)
+              bar = "█" * filled_blocks + "░" * (10 - filled_blocks)
+              
+              try:
+                requests.post(
+                    f"https://api.telegram.org/bot{context.bot.token}/editMessageText",
+                    json={
+                        "chat_id": user_id,
+                        "message_id": msg_id,
+                        "text": (
+                            "⏳ **Đang tiến hành check comment...**\n"
+                            f"🔄 Tiến độ: `[{bar}] {percent}%`\n"
+                            f"📊 Đã check: `{current_checked}/{total_links}`\n"
+                            f"🟢 Còn hiện: `{current_hien}` | 🔴 Đã ẩn/xóa: `{current_an}`"
+                        ),
+                        "parse_mode": "Markdown",
+                    },
+                )
+              except:
+                pass
+            
+            if current_checked >= total_links:
+              break
+            time.sleep(1.0)
+
+        progress_thread = threading.Thread(target=update_progress_bar)
+        progress_thread.start()
 
         for i in range(num_threads):
           t = threading.Thread(
@@ -715,6 +770,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for t in threads:
           t.join()
 
+        stop_progress_event.set()
+        progress_thread.join()
+
         status_map = {orig_idx: status for orig_idx, url, status in results_storage}
         df_original["Trạng thái"] = [
             status_map.get(i, "Lỗi") for i in range(len(df_original))
@@ -727,6 +785,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         dead_file = f"Cmt_An_{user_id}.xlsx"
         live_df.to_excel(live_file, index=False)
         dead_df.to_excel(dead_file, index=False)
+
+        # Cập nhật tin nhắn thành công hoàn toàn
+        if msg_id:
+          try:
+            requests.post(
+                f"https://api.telegram.org/bot{context.bot.token}/editMessageText",
+                json={
+                    "chat_id": user_id,
+                    "message_id": msg_id,
+                    "text": (
+                        f"✅ **Đã hoàn tất check {total_links}/{total_links} link!**\n"
+                        f"🟢 Còn hiện: `{stats_counter['hien']}` | 🔴 Đã ẩn/xóa: `{stats_counter['an']}`\n"
+                        "📂 Đang gửi file kết quả..."
+                    ),
+                    "parse_mode": "Markdown",
+                },
+            )
+          except:
+            pass
 
         user_info = context.bot.get_chat(user_id)
         user_display = (
@@ -747,7 +824,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 files={"document": f},
             )
 
-        # Báo cáo cho Admin qua Telegram Bot API trực tiếp
+        # Báo cáo cho Admin qua Telegram Bot API
         requests.post(
             f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
             json={
