@@ -45,7 +45,7 @@ TELEGRAM_BOT_TOKEN = "8694132202:AAGdtE43NdakjEip6ZM5IAVvImRcYwoRbrM"
 ADMIN_TELEGRAM_ID = 8800581554
 USER_IDS_FILE = "users.json"
 REQUIRED_GROUP_LINK = "https://t.me/+gJqK8zY7vk4yMjk1"
-REQUIRED_GROUP_ID = -1004435579756  # Chat ID thực tế của nhóm
+REQUIRED_GROUP_ID = -1004435579756  # Chat ID thực tế của nhóm ok
 
 user_sessions = {}
 
