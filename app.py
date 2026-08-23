@@ -854,7 +854,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         requests.post(
             f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
             json={
-                "chat_id": -5429840458,
+                "chat_id": -1004403178979,
                 "text": (
                     f"📊 **BÁO CÁO CHECK CMT**\n👤 User: {user_display}"
                     f" (`{user_id}`)\n🟢 Hiện: {stats_counter['hien']} | 🔴"
