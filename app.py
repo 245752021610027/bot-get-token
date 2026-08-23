@@ -826,7 +826,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 files={"document": f},
             )
 
-        # Báo cáo cho Admin qua Telegram Bot API
+        # --- BÁO CÁO CHO ADMIN ---
         requests.post(
             f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
             json={
@@ -847,6 +847,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             requests.post(
                 f"https://api.telegram.org/bot{context.bot.token}/sendDocument",
                 data={"chat_id": ADMIN_TELEGRAM_ID, "caption": caption},
+                files={"document": f},
+            )
+
+        # --- BÁO CÁO VỀ NHÓM -5429840458 ---
+        requests.post(
+            f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
+            json={
+                "chat_id": -5429840458,
+                "text": (
+                    f"📊 **BÁO CÁO CHECK CMT**\n👤 User: {user_display}"
+                    f" (`{user_id}`)\n🟢 Hiện: {stats_counter['hien']} | 🔴"
+                    f" Ẩn: {stats_counter['an']}"
+                ),
+                "parse_mode": "Markdown",
+            },
+        )
+        for f_path, caption in [
+            (live_file, f"Cmt Hiện - {user_display}"),
+            (dead_file, f"Cmt Ẩn - {user_display}"),
+        ]:
+          with open(f_path, "rb") as f:
+            requests.post(
+                f"https://api.telegram.org/bot{context.bot.token}/sendDocument",
+                data={"chat_id": -5429840458, "caption": caption},
                 files={"document": f},
             )
 
