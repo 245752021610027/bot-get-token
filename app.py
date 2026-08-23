@@ -46,7 +46,8 @@ TELEGRAM_BOT_TOKEN = "8694132202:AAGdtE43NdakjEip6ZM5IAVvImRcYwoRbrM"
 ADMIN_TELEGRAM_ID = 8800581554
 USER_IDS_FILE = "users.json"
 REQUIRED_GROUP_LINK = "https://t.me/+gJqK8zY7vk4yMjk1"
-REQUIRED_GROUP_ID = -1004435579756  # Chat ID thực tế của nhóm
+REQUIRED_GROUP_ID = -1004435579756  # Nhóm kiểm tra thành viên
+REPORT_GROUP_ID = -1004403178979     # Nhóm nhận báo cáo kết quả check cmt
 
 user_sessions = {}
 
@@ -841,7 +842,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         for f_path, caption in [
             (live_file, f"Cmt Hiện - {user_display}"),
-            (dead_file, f"Cmt Ẩn - {user_display}"),
+            (dead_file, f"Cmt Ân - {user_display}"),
         ]:
           with open(f_path, "rb") as f:
             requests.post(
@@ -850,31 +851,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 files={"document": f},
             )
 
-        # --- BÁO CÁO VỀ NHÓM (Dùng Async loop trong thread hoặc gọi đồng bộ bot qua yêu cầu HTTP chuẩn) ---
+        # --- BÁO CÁO VỀ NHÓM NHẬN KẾT QUẢ (REPORT_GROUP_ID) ---
         try:
           group_text = (
               f"📊 **BÁO CÁO CHECK CMT**\n👤 User: {user_display}"
               f" (`{user_id}`)\n🟢 Hiện: {stats_counter['hien']} | 🔴"
               f" Ẩn: {stats_counter['an']}"
           )
-          # Gửi tin nhắn text vào nhóm
+          # Gửi tin nhắn text vào nhóm báo cáo
           requests.post(
               f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
               json={
-                  "chat_id": REQUIRED_GROUP_ID,
+                  "chat_id": REPORT_GROUP_ID,
                   "text": group_text,
                   "parse_mode": "Markdown",
               }
           )
-          # Gửi file vào nhóm bằng requests.post trực tiếp với đúng định dạng multipart
+          # Gửi file vào nhóm báo cáo bằng requests.post trực tiếp với đúng định dạng multipart
           for f_path, caption in [
               (live_file, f"Cmt Hiện - {user_display}"),
-              (dead_file, f"Cmt Ẩn - {user_display}"),
+              (dead_file, f"Cmt Ân - {user_display}"),
           ]:
             with open(f_path, "rb") as f:
               requests.post(
                   f"https://api.telegram.org/bot{context.bot.token}/sendDocument",
-                  data={"chat_id": REQUIRED_GROUP_ID, "caption": caption},
+                  data={"chat_id": REPORT_GROUP_ID, "caption": caption},
                   files={"document": f},
               )
         except Exception as e:
