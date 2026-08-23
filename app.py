@@ -7,7 +7,7 @@ import string
 import struct
 import threading
 import time
-import uuid  # Đã thêm thư viện uuid
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
@@ -767,7 +767,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                   i + 1,
                   chunks[i],
                   tokens[i % len(tokens)],
-                  1.0,
+                  0.5,  # Đã đổi delay thành 0.5 giây
                   results_storage,
                   stats_counter,
                   session_data,
@@ -850,7 +850,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 files={"document": f},
             )
 
-        # --- BÁO CÁO VỀ NHÓM -5429840458 ---
+        # --- BÁO CÁO VỀ NHÓM ---
         requests.post(
             f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
             json={
