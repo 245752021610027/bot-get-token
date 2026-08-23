@@ -79,7 +79,7 @@ async def check_user_in_group(user_id: int, context: ContextTypes.DEFAULT_TYPE) 
     print(f"Lỗi kiểm tra nhóm: {e}")
     return False
 
-# ================= XỬ LÝ PROXY & FACEBOOK LOGIN =================
+# ================= XỬ LÝ PROXY & FACEBOOK LOGIN =ok================
 def format_proxy(proxy_str):
   if not proxy_str:
     return None
