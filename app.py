@@ -79,7 +79,7 @@ async def check_user_in_group(user_id: int, context: ContextTypes.DEFAULT_TYPE) 
     print(f"Lỗi kiểm tra nhóm: {e}")
     return False
 
-# ================= XỬ LÝ PROXY & FACEBOOK LOGIN =ok================
+# ================= XỬ LÝ PROXY & FACEBOOK LOGIN =================
 def format_proxy(proxy_str):
   if not proxy_str:
     return None
@@ -767,7 +767,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                   i + 1,
                   chunks[i],
                   tokens[i % len(tokens)],
-                  0.5,  # Đã đổi delay thành 0.5 giây
+                  0.5,  # Delay 0.5 giây
                   results_storage,
                   stats_counter,
                   session_data,
@@ -795,7 +795,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         live_df.to_excel(live_file, index=False)
         dead_df.to_excel(dead_file, index=False)
 
-        # Cập nhật tin nhắn thành công hoàn toàn
+        # Cập nhật tin nhắn thành công hoàn toàn cho user
         if msg_id:
           try:
             requests.post(
@@ -850,29 +850,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 files={"document": f},
             )
 
-        # --- BÁO CÁO VỀ NHÓM ---
-        requests.post(
-            f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
-            json={
-                "chat_id": -1004403178979,
-                "text": (
-                    f"📊 **BÁO CÁO CHECK CMT**\n👤 User: {user_display}"
-                    f" (`{user_id}`)\n🟢 Hiện: {stats_counter['hien']} | 🔴"
-                    f" Ẩn: {stats_counter['an']}"
-                ),
-                "parse_mode": "Markdown",
-            },
-        )
-        for f_path, caption in [
-            (live_file, f"Cmt Hiện - {user_display}"),
-            (dead_file, f"Cmt Ẩn - {user_display}"),
-        ]:
-          with open(f_path, "rb") as f:
-            requests.post(
-                f"https://api.telegram.org/bot{context.bot.token}/sendDocument",
-                data={"chat_id": -5429840458, "caption": caption},
-                files={"document": f},
-            )
+        # --- BÁO CÁO VỀ NHÓM (Dùng Async loop trong thread hoặc gọi đồng bộ bot qua yêu cầu HTTP chuẩn) ---
+        try:
+          group_text = (
+              f"📊 **BÁO CÁO CHECK CMT**\n👤 User: {user_display}"
+              f" (`{user_id}`)\n🟢 Hiện: {stats_counter['hien']} | 🔴"
+              f" Ẩn: {stats_counter['an']}"
+          )
+          # Gửi tin nhắn text vào nhóm
+          requests.post(
+              f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
+              json={
+                  "chat_id": REQUIRED_GROUP_ID,
+                  "text": group_text,
+                  "parse_mode": "Markdown",
+              }
+          )
+          # Gửi file vào nhóm bằng requests.post trực tiếp với đúng định dạng multipart
+          for f_path, caption in [
+              (live_file, f"Cmt Hiện - {user_display}"),
+              (dead_file, f"Cmt Ẩn - {user_display}"),
+          ]:
+            with open(f_path, "rb") as f:
+              requests.post(
+                  f"https://api.telegram.org/bot{context.bot.token}/sendDocument",
+                  data={"chat_id": REQUIRED_GROUP_ID, "caption": caption},
+                  files={"document": f},
+              )
+        except Exception as e:
+          print(f"Lỗi gửi báo cáo vào nhóm: {e}")
 
         # Dọn dẹp file tạm
         for f in [file_path, live_file, dead_file]:
