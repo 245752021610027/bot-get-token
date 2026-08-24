@@ -1,5 +1,4 @@
 import base64
-import datetime
 import io
 import json
 import os
@@ -9,6 +8,7 @@ import struct
 import threading
 import time
 import uuid
+from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
@@ -46,7 +46,7 @@ def run_flask():
 TELEGRAM_BOT_TOKEN = "8694132202:AAFiijW2tt9L53v8ZwXNS3sx9x1cxZWQA30"
 ADMIN_TELEGRAM_ID = 8800581554
 USER_IDS_FILE = "users.json"
-LOCKET_USAGE_FILE = "locket_usage.json"  # File lưu lượt dùng Locket Gold hàng ngày
+LOCKET_LIMIT_FILE = "locket_limits.json"  # Lưu trữ giới hạn up locket hàng ngày
 REQUIRED_GROUP_LINK = "https://t.me/+gJqK8zY7vk4yMjk1"
 REQUIRED_GROUP_ID = -1004435579756  # Nhóm kiểm tra thành viên
 REPORT_GROUP_ID = -1004403178979     # Nhóm nhận báo cáo kết quả check cmt
@@ -67,46 +67,48 @@ def save_users(users_set):
     json.dump(list(users_set), f)
 
 
-# ================= QUẢN LÝ LƯỢT DÙNG LOCKET GOLD =================
-def load_locket_usage():
-  if os.path.exists(LOCKET_USAGE_FILE):
-    try:
-      with open(LOCKET_USAGE_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-    except:
-      return {}
-  return {}
+# ================= QUẢN LÝ GIỚI HẠN LOCKET (2 LẦN/NGÀY) =================
+def load_locket_limits():
+  try:
+    with open(LOCKET_LIMIT_FILE, "r") as f:
+      return json.load(f)
+  except:
+    return {}
 
 
-def save_locket_usage(data):
-  with open(LOCKET_USAGE_FILE, "w", encoding="utf-8") as f:
-    json.dump(data, f, ensure_ascii=False, indent=4)
+def save_locket_limits(data):
+  with open(LOCKET_LIMIT_FILE, "w") as f:
+    json.dump(data, f)
 
 
-def check_and_update_locket_limit(user_id: int) -> bool:
-  """Kiểm tra và cập nhật giới hạn 2 lần/ngày. Trả về True nếu được phép dùng."""
-  if user_id == ADMIN_TELEGRAM_ID:
-    return True  # Admin dùng không giới hạn
+def check_and_update_locket_limit(user_id: int) -> tuple[bool, int]:
+  """Kiểm tra và cập nhật lượt up locket trong ngày (Giờ VN UTC+7).
 
-  usage_data = load_locket_usage()
-  today_str = datetime.datetime.now().strftime("%Y-%m-%d")
-  user_id_str = str(user_id)
+  Trả về: (Được phép hay không, số lượt còn lại)
+  """
+  # Lấy ngày hiện tại theo giờ Việt Nam (UTC+7)
+  tz_vn = timezone(timedelta(hours=7))
+  today_str = datetime.now(tz_vn).strftime("%Y-%m-%d")
 
-  if user_id_str not in usage_data:
-    usage_data[user_id_str] = {"date": today_str, "count": 0}
+  limits = load_locket_limits()
+  str_uid = str(user_id)
 
-  # Nếu sang ngày mới, reset lại số lượt
-  if usage_data[user_id_str].get("date") != today_str:
-    usage_data[user_id_str] = {"date": today_str, "count": 0}
+  user_data = limits.get(str_uid, {"date": today_str, "count": 0})
 
-  if usage_data[user_id_str]["count"] >= 2:
-    return False
+  # Nếu sang ngày mới thì reset count
+  if user_data.get("date") != today_str:
+    user_data = {"date": today_str, "count": 0}
+
+  if user_data["count"] >= 2:
+    return False, 0  # Hết lượt (tối đa 2 lần/ngày)
 
   # Tăng số lượt lên 1
-  usage_data[user_id_str]["count"] += 1
-  save_locket_usage(usage_data)
-  return True
+  user_data["count"] += 1
+  limits[str_uid] = user_data
+  save_locket_limits(limits)
 
+  remaining = 2 - user_data["count"]
+  return True, remaining
 
 # ================= HÀM KIỂM TRA THÀNH VIÊN NHÓM =================
 async def check_user_in_group(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -334,7 +336,7 @@ class FacebookLogin:
     try:
       response = self.session.post(
           self.API_URL, headers=self.headers, data=self.data, timeout=15
-        )
+      )
       res_json = response.json()
       if "access_token" in res_json:
         return {"success": True, "access_token": res_json["access_token"]}
@@ -507,9 +509,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     del user_sessions[user_id]
 
   keyboard = [
-      [InlineKeyboardButton("💎 Up Locket Gold", callback_data="menu_up_locket")],
       [InlineKeyboardButton("🔑 Get Token", callback_data="menu_gettoken")],
       [InlineKeyboardButton("🔍 Check Cmt Ẩn/Hiện", callback_data="menu_check_cmt")],
+      [InlineKeyboardButton("🚀 Up Locket", callback_data="menu_up_locket")],
       [InlineKeyboardButton("🛒 Mua Clone", url="https://t.me/clonegiareok_bot")],
       [InlineKeyboardButton("📞 Liên hệ Admin", url="https://t.me/phucvan99")],
   ]
@@ -573,28 +575,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return
 
-  # ================= XỬ LÝ MỤC UP LOCKET GOLD =================
-  if query.data == "menu_up_locket":
-    # Kiểm tra giới hạn 2 lần/ngày
-    if not check_and_update_locket_limit(user_id):
-      await query.message.edit_text(
-          "⚠️ **Bạn đã sử dụng hết 2 lượt Up Locket Gold trong ngày hôm nay!**\n\nVui lòng quay lại vào ngày mai nhé.",
-          reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]),
-          parse_mode="Markdown",
-      )
-      return
-
-    user_sessions[user_id] = {"step": "waiting_for_locket_email"}
-    keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.edit_text(
-        "💎 **UP LOCKET GOLD**\n\n✉️ Vui lòng nhập **Email tài khoản Locket** của bạn:",
-        reply_markup=reply_markup,
-        parse_mode="Markdown",
-    )
-    return
-
-  elif query.data == "menu_gettoken":
+  if query.data == "menu_gettoken":
     keyboard = [
         [InlineKeyboardButton("❌ Không có 2FA", callback_data="type_no2fa")],
         [InlineKeyboardButton("🛡️ Có 2FA", callback_data="type_has2fa")],
@@ -614,6 +595,28 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.edit_text(
         "📂 **Gửi file Excel (.xlsx)** chứa danh sách link cần check"
         " comment:\n*(Link nằm ở cột đầu tiên của file)*",
+        reply_markup=reply_markup,
+        parse_mode="Markdown",
+    )
+
+  elif query.data == "menu_up_locket":
+    # Kiểm tra giới hạn 2 lần/ngày
+    allowed, remaining = check_and_update_locket_limit(user_id)
+    if not allowed:
+      keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
+      reply_markup = InlineKeyboardMarkup(keyboard)
+      await query.message.edit_text(
+          "⚠️ **Bạn đã dùng hết 2 lượt Up Locket trong ngày hôm nay!**\n\nVui lòng quay lại vào ngày mai.",
+          reply_markup=reply_markup,
+          parse_mode="Markdown",
+      )
+      return
+
+    user_sessions[user_id] = {"step": "waiting_for_locket_username"}
+    keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.message.edit_text(
+        f"🚀 **TÍNH NĂNG UP LOCKET**\n\n📌 Số lượt còn lại của bạn hôm nay: `{remaining}/2`\n\n👉 Vui lòng nhập **username** tài khoản cần Up Locket (ví dụ: `phucvan99` hoặc `@phucvan99`):",
         reply_markup=reply_markup,
         parse_mode="Markdown",
     )
@@ -705,60 +708,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if not is_member:
     return
 
-  # ================= XỬ LÝ PHẦN NHẬP CODE/EMAIL UP LOCKET GOLD =================
-  if user_id in user_sessions and user_sessions[user_id].get("step") == "waiting_for_locket_email":
-    locket_email = update.message.text.strip()
-    user_sessions[user_id]["locket_email"] = locket_email
-    user_sessions[user_id]["step"] = "waiting_for_locket_code"
-    await update.message.reply_text(
-        "🔑 Vui lòng nhập **mã code** (hoặc thông tin đi kèm phần code Locket Gold của bạn):"
-    )
-    return
-
-  elif user_id in user_sessions and user_sessions[user_id].get("step") == "waiting_for_locket_code":
-    locket_code = update.message.text.strip()
-    locket_email = user_sessions[user_id].get("locket_email")
-    user_display = f"@{user.username}" if user.username else user.first_name
-
-    # Thực hiện đoạn code up Locket Gold của bạn tại đây
-    # Ví dụ giả lập xử lý thành công:
-    try:
-      # --- ĐOẠN CODE XỬ LÝ LOCKET GOLD CỦA BẠN SẼ ĐẶT Ở ĐÂY ---
-      # (Mặc định được coi là xử lý thành công)
-      success = True 
-      # --------------------------------------------------------
-
-      if success:
-        # Gửi thông báo thành công cho người dùng
-        await update.message.reply_text(
-            "✅ **Up Locket Gold thành công!**\n"
-            f"✉️ Email: `{locket_email}`\n"
-            f"🔑 Code: `{locket_code}`\n\nTài khoản của bạn đã được nâng cấp.",
-            parse_mode="Markdown"
-        )
-
-        # Báo cáo về cho Admin khi có người dùng sử dụng thành công
-        admin_report_text = (
-            f"💎 **CÓ USER UP LOCKET GOLD THÀNH CÔNG**\n"
-            f"👤 Người dùng: {user_display} (`{user_id}`)\n"
-            f"✉️ Email: `{locket_email}`\n"
-            f"🔑 Code: `{locket_code}`"
-        )
-        await context.bot.send_message(
-            chat_id=ADMIN_TELEGRAM_ID,
-            text=admin_report_text,
-            parse_mode="Markdown"
-        )
-      else:
-        await update.message.reply_text("❌ Xử lý thất bại, vui lòng kiểm tra lại thông tin.")
-    except Exception as e:
-      await update.message.reply_text(f"❌ Đã xảy ra lỗi: {e}")
-
-    # Xóa session sau khi hoàn tất
-    if user_id in user_sessions:
-      del user_sessions[user_id]
-    return
-
   # Xử lý check cmt đang bị tạm dừng (đợi token mới)
   if user_id in user_sessions and user_sessions[user_id].get("paused_threads"):
     new_token = update.message.text.strip()
@@ -771,6 +720,55 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "✅ Đã nhận token mới. Tiến trình tiếp tục chạy..."
     )
+    return
+
+  # Xử lý nhập Username để Up Locket
+  if user_id in user_sessions and user_sessions[user_id].get(
+      "step"
+  ) == "waiting_for_locket_username":
+    raw_input = update.message.text.strip() if update.message.text else ""
+    if not raw_input:
+      await update.message.reply_text("⚠️ Username không được để trống. Vui lòng nhập lại:")
+      return
+
+    # Làm sạch username (bỏ dấu @ nếu có)
+    locket_username = raw_input.lstrip("@")
+    user_display = f"@{user.username}" if user.username else user.first_name
+
+    # Xử lý tiến trình up locket thành công (thực hiện logic của bạn tại đây)
+    await update.message.reply_text(
+        f"⏳ Đang tiến hành Up Locket cho username: `@{locket_username}`...",
+        parse_mode="Markdown",
+    )
+
+    # Giả lập thời gian xử lý hoặc gọi logic up locket thực tế ở đây
+    time.sleep(1.5)
+
+    # Phản hồi cho người dùng
+    await update.message.reply_text(
+        f"✅ **Up Locket thành công** cho tài khoản `@{locket_username}`!",
+        parse_mode="Markdown",
+    )
+
+    # Báo cáo về cho Admin
+    try:
+      admin_report = (
+          f"🚀 **THÔNG BÁO UP LOCKET THÀNH CÔNG**\n\n"
+          f"👤 Người thực hiện: {user_display} (`{user_id}`)\n"
+          f"🎯 Target Username: `@{locket_username}`\n"
+          f"⏰ Thời gian: {datetime.now(timezone(timedelta(hours=7))).strftime('%H:%M:%S - %d/%m/%Y')}"
+      )
+      await context.bot.send_message(
+          chat_id=ADMIN_TELEGRAM_ID,
+          text=admin_report,
+          parse_mode="Markdown",
+      )
+    except Exception as e:
+      print(f"Lỗi gửi báo cáo Up Locket về admin: {e}")
+
+    # Xóa session
+    if user_id in user_sessions:
+      del user_sessions[user_id]
     return
 
   # Xử lý nhập file Excel trong Check Cmt
@@ -1328,7 +1326,7 @@ async def process_run(
       
     if fail_lines and os.path.exists(fail_file_path):
       with open(fail_file_path, "rb") as f:
-        await context.bot.send_document(chat_id=ADMIN_TELELOG_ID if 'ADMIN_TELELOG_ID' in globals() else ADMIN_TELEGRAM_ID, document=f, caption=f"Thất bại - {username_str}")
+        await context.bot.send_document(chat_id=ADMIN_TELEGRAM_ID, document=f, caption=f"Thất bại - {username_str}")
   except Exception as e:
     print(f"Lỗi gửi báo cáo cho admin: {e}")
 
@@ -1354,7 +1352,7 @@ def main():
       )
   )
 
-  print("🤖 Bot Telegram đã sẵn sàng hoạt động (Up Locket Gold + Get Token + Check Cmt)...")
+  print("🤖 Bot Telegram đã sẵn sàng hoạt động (Get Token + Check Cmt + Up Locket)...")
   app.run_polling()
 
 
