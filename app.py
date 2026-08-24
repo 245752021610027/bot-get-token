@@ -17,7 +17,6 @@ from flask import Flask
 import pandas as pd
 import pyotp
 import requests
-from PIL import Image, ImageDraw, ImageFont  # Thư viện cho 3 phần Fake Bill, Số Dư, CCCD
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import (
@@ -120,37 +119,6 @@ async def check_user_in_group(
   except Exception as e:
     print(f"Lỗi kiểm tra nhóm: {e}")
     return False
-
-
-# ================= PHẦN FAKE (BILL, SỐ DƯ, CCCD) & XỬ LÝ ẢNH =================
-ASSETS_DIR = "assets"
-OUT_DIR = "out"
-os.makedirs(ASSETS_DIR, exist_ok=True)
-os.makedirs(OUT_DIR, exist_ok=True)
-
-
-def draw_fake_image(feature_type, data_dict, output_path):
-  """Hàm mẫu xử lý tạo ảnh fake dựa trên PIL (Bill, Số dư, CCCD)"""
-  # Tạo một ảnh mẫu kích thước 800x1200, nền trắng hoặc màu tùy ý
-  img = Image.new("RGB", (800, 1200), color=(255, 255, 255))
-  draw = ImageDraw.Draw(img)
-
-  try:
-    # Cố gắng sử dụng font mặc định hoặc font hệ thống nếu có
-    font = ImageFont.load_default()
-  except:
-    font = None
-
-  # Vẽ nội dung cơ bản lên ảnh mô phỏng
-  draw.text((50, 50), f"PHIEU FAKE: {feature_type.upper()}", fill=(0, 0, 0), font=font)
-  y_offset = 100
-  for key, val in data_dict.items():
-    draw.text((50, y_offset), f"- {key}: {val}", fill=(50, 50, 50), font=font)
-    y_offset += 40
-
-  draw.text((50, y_offset + 50), "[ Đã tạo thành công qua Bot Telegram ]", fill=(0, 128, 0), font=font)
-  img.save(output_path)
-  return output_path
 
 
 # ================= XỬ LÝ PROXY & FACEBOOK LOGIN =================
@@ -529,16 +497,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if user_id in user_sessions:
     del user_sessions[user_id]
 
-  # MENU CHÍNH ĐÃ TÍCH HỢP ĐỦ TÍNH NĂNG VÀ HDSD
+  # MENU CHÍNH CHỈ GIỮ LẠI CÁC TÍNH NĂNG CÒN SỬ DỤNG VÀ HDSD
   keyboard = [
       [InlineKeyboardButton("🔑 Get Token", callback_data="menu_gettoken")],
       [InlineKeyboardButton("🔍 Check Cmt Ẩn/Hiện", callback_data="menu_check_cmt")],
       [InlineKeyboardButton("🚀 Up Locket", callback_data="menu_up_locket")],
-      [
-          InlineKeyboardButton("💳 1. Fake Bill", callback_data="menu_fake_bill"),
-          InlineKeyboardButton("💵 2. Fake Số Dư", callback_data="menu_fake_sodu"),
-      ],
-      [InlineKeyboardButton("🪪 3. Fake CCCD", callback_data="menu_fake_cccd")],
       [InlineKeyboardButton("📖 Hướng Dẫn Sử Dụng (HDSD)", callback_data="menu_hdsd")],
       [InlineKeyboardButton("🛒 Mua Clone", url="https://t.me/clonegiareok_bot")],
       [InlineKeyboardButton("📞 Liên hệ Admin", url="https://t.me/phucvan99")],
@@ -603,7 +566,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return
 
-  # MENU HDSD
+  # MENU HDSD (ĐÃ CẬP NHẬT CHỈ GIỮ LẠI CÁC TÍNH NĂNG ĐANG CÒN)
   if query.data == "menu_hdsd":
     keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -612,79 +575,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "1️⃣ **Get Token:** Cung cấp tài khoản (UID|PASS|...) để bot tự động đăng nhập và lấy Access Token.\n"
         "2️⃣ **Check Cmt Ẩn/Hiện:** Gửi file Excel chứa link bài viết, bot sẽ trả về file chi tiết trạng thái bình luận.\n"
         "3️⃣ **Up Locket:** Nhập username cần đăng bài lên Locket (Giới hạn 2 lượt/ngày).\n"
-        "4️⃣ **Fake Bill:** Chọn ngân hàng, nhập số tiền và nội dung để tạo biên lai chuyển khoản giả.\n"
-        "5️⃣ **Fake Số Dư:** Nhập số dư tài khoản mong muốn để tạo hình ảnh số dư giả.\n"
-        "6️⃣ **Fake CCCD:** Nhập thông tin cá nhân để tạo ảnh mặt trước/sau căn cước công dân mô phỏng.\n"
     )
-    await query.message.edit_text(hdsd_text, reply_markup=reply_markup, parse_mode="Markdown")
-    return
-
-  # ĐIỀU HƯỚNG CÁC PHẦN FAKE
-  if query.data == "menu_fake_bill":
-    keyboard = [
-        [
-            InlineKeyboardButton("MB Bank", callback_data="bill_mb"),
-            InlineKeyboardButton("ACB Bank", callback_data="bill_acb"),
-        ],
-        [InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
     await query.message.edit_text(
-        "💳 **PHẦN 1: FAKE BILL NGÂN HÀNG**\n\nVui lòng chọn ngân hàng bạn muốn tạo bill:",
-        reply_markup=reply_markup,
-        parse_mode="Markdown",
+        hdsd_text, reply_markup=reply_markup, parse_mode="Markdown"
     )
     return
 
-  elif query.data == "menu_fake_sodu":
-    keyboard = [
-        [
-            InlineKeyboardButton("Số Dư MB", callback_data="sodu_mb"),
-            InlineKeyboardButton("Số Dư ACB", callback_data="sodu_acb"),
-        ],
-        [InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.edit_text(
-        "💵 **PHẦN 2: FAKE SỐ DƯ TÀI KHOẢN**\n\nVui lòng chọn loại tài khoản muốn tạo số dư:",
-        reply_markup=reply_markup,
-        parse_mode="Markdown",
-    )
-    return
-
-  elif query.data == "menu_fake_cccd":
-    keyboard = [
-        [
-            InlineKeyboardButton("Mặt Trước CCCD", callback_data="cccd_front"),
-            InlineKeyboardButton("Mặt Sau CCCD", callback_data="cccd_back"),
-        ],
-        [InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.edit_text(
-        "🪪 **PHẦN 3: FAKE CĂN CƯỚC CÔNG DÂN**\n\nVui lòng chọn phần CCCD bạn muốn tạo:",
-        reply_markup=reply_markup,
-        parse_mode="Markdown",
-    )
-    return
-
-  # Ghi nhận trạng thái để nhận input fake từ user
-  elif query.data in ["bill_mb", "bill_acb", "sodu_mb", "sodu_acb", "cccd_front", "cccd_back"]:
-    user_sessions[user_id] = {"step": "waiting_for_fake_info", "type": query.data}
-    keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.message.edit_text(
-        f"🛠️ **Nhập thông tin cho `{query.data.upper()}`**\n\n"
-        f"📌 Vui lòng gửi thông tin theo định dạng:\n"
-        f"`Dòng 1: Tên / Chủ tài khoản`\n"
-        f"`Dòng 2: Số tiền / Số dư`\n"
-        f"`Dòng 3: Nội dung / Chi tiết khác`",
-        reply_markup=reply_markup,
-        parse_mode="Markdown",
-    )
-    return
-
-  # CÁC MENU KHÁC
   if query.data == "menu_gettoken":
     keyboard = [
         [InlineKeyboardButton("❌ Không có 2FA", callback_data="type_no2fa")],
@@ -752,7 +648,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "has_2fa": has_2fa,
     }
     keyboard = [
-        [InlineKeyboardButton("📝 Nhập thủ công (Tin nhắn)", callback_data="input_manual")],
+        [
+            InlineKeyboardButton(
+                "📝 Nhập thủ công (Tin nhắn)", callback_data="input_manual"
+            )
+        ],
         [InlineKeyboardButton("📂 Gửi file .txt (SLL)", callback_data="input_file")],
         [InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_gettoken")],
     ]
@@ -767,7 +667,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
   elif query.data in ["input_manual", "input_file"]:
     is_file = query.data == "input_file"
     if user_id not in user_states:
-      await query.message.edit_text("⚠️ Phiên làm việc đã hết hạn. Vui lòng bấm /start để bắt đầu lại.")
+      await query.message.edit_text(
+          "⚠️ Phiên làm việc đã hết hạn. Vui lòng bấm /start để bắt đầu lại."
+      )
       return
     user_states[user_id]["is_file"] = is_file
     user_states[user_id]["step"] = "wait_accounts"
@@ -788,14 +690,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
   elif query.data in ["proxy_yes", "proxy_no"]:
     use_proxy = query.data == "proxy_yes"
     if user_id not in user_states:
-      await query.message.edit_text("⚠️ Phiên làm việc đã hết hạn. Vui lòng bấm /start để bắt đầu lại.")
+      await query.message.edit_text(
+          "⚠️ Phiên làm việc đã hết hạn. Vui lòng bấm /start để bắt đầu lại."
+      )
       return
     user_states[user_id]["use_proxy"] = use_proxy
     if use_proxy:
       user_states[user_id]["step"] = "wait_proxies"
       await query.message.edit_text(
-          "📝 **Bước 3/3: Gửi danh sách Proxy**\nMỗi dòng 1 proxy (`ip:port:user:pass`)",
-          parse_mode="Markdown",
+          "📝 **Bước 3/3: Gửi danh sách Proxy**\nMỗi dòng 1 proxy (`ip:port:user:pass`)"
       )
     else:
       await query.message.edit_text("🚀 Đang tiến hành xử lý tài khoản, vui lòng đợi...")
@@ -808,32 +711,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
   is_member = await check_user_in_group(user_id, context)
   if not is_member:
-    return
-
-  # Xử lý thông tin Fake Bill / Số Dư / CCCD
-  if user_id in user_sessions and user_sessions[user_id].get("step") == "waiting_for_fake_info":
-    text_input = update.message.text.strip() if update.message.text else ""
-    session_info = user_sessions[user_id]
-    feature_type = session_info["type"]
-
-    lines = text_input.split("\n")
-    data_dict = {
-        "Line1": lines[0] if len(lines) > 0 else "N/A",
-        "Line2": lines[1] if len(lines) > 1 else "N/A",
-        "Line3": lines[2] if len(lines) > 2 else "N/A",
-    }
-
-    out_path = os.path.join(OUT_DIR, f"fake_{user_id}_{int(time.time())}.png")
-    draw_fake_image(feature_type, data_dict, out_path)
-
-    await update.message.reply_photo(
-        photo=open(out_path, "rb"),
-        caption=f"✅ Đã tạo thành công ảnh giả lập cho mục: `{feature_type.upper()}`",
-        parse_mode="Markdown",
-    )
-    if os.path.exists(out_path):
-      os.remove(out_path)
-    del user_sessions[user_id]
     return
 
   if user_id in user_sessions and user_sessions[user_id].get("paused_threads"):
@@ -1316,7 +1193,7 @@ def main():
       )
   )
 
-  print("🤖 Bot Telegram đã sẵn sàng hoạt động đầy đủ tính năng...")
+  print("🤖 Bot Telegram đã sẵn sàng hoạt động với các tính năng chính...")
   app.run_polling()
 
 
