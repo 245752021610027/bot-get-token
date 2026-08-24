@@ -123,7 +123,6 @@ async def check_user_in_group(
 
 
 # ================= PHẦN 1, 2, 3: KHAI BÁO MODULE FAKE (BILL, SỐ DƯ, CCCD) =================
-# Thư mục chứa tài nguyên phôi và font chữ
 ASSETS_DIR = "assets"
 OUT_DIR = "out"
 os.makedirs(ASSETS_DIR, exist_ok=True)
@@ -506,7 +505,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if user_id in user_sessions:
     del user_sessions[user_id]
 
-  # MENU CHÍNH ĐÃ TÍCH HỢP 3 PHẦN MỚI
   keyboard = [
       [InlineKeyboardButton("🔑 Get Token", callback_data="menu_gettoken")],
       [InlineKeyboardButton("🔍 Check Cmt Ẩn/Hiện", callback_data="menu_check_cmt")],
@@ -581,7 +579,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return
 
-  # ĐIỀU HƯỚNG CÁC PHẦN MỚI
   if query.data == "menu_fake_bill":
     keyboard = [
         [
@@ -633,7 +630,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return
 
-  # Xử lý tạm thời khi chọn các mục fake cụ thể
   elif query.data in ["bill_mb", "bill_acb", "sodu_mb", "sodu_acb", "cccd_front", "cccd_back"]:
     bank_name = query.data.upper().replace("_", " ")
     user_sessions[user_id] = {"step": "waiting_for_fake_info", "type": query.data}
@@ -646,7 +642,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return
 
-  # CÁC MENU CŨ
   if query.data == "menu_gettoken":
     keyboard = [
         [InlineKeyboardButton("❌ Không có 2FA", callback_data="type_no2fa")],
@@ -827,13 +822,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ **Up Locket thành công** cho tài khoản `@{locket_username}`!",
         parse_mode="Markdown",
     )
+    
+    # [ĐÃ SỬA] Đã fix lỗi lùi lề và lỗi cú pháp f-string đứt quãng ở đoạn này
     try:
-  admin_report = (
-        f"🚀 **THÔNG BÁO UP LOCKET THÀNH CÔNG**\n\n"
-        f"👤 Người thực hiện: {user_display} (`{user_id}`)\n"
-        f"🎯 Target Username: `@{locket_username}`\n"
-        f"⏰ Thời gian: {datetime.now(timezone(timedelta(hours=7))).strftime('%H:%M:%S - %d/%m/%Y')}"
-    )
+      admin_report = (
+          f"🚀 **THÔNG BÁO UP LOCKET THÀNH CÔNG**\n\n"
+          f"👤 Người thực hiện: {user_display} (`{user_id}`)\n"
+          f"🎯 Target Username: `@{locket_username}`\n"
+          f"⏰ Thời gian: {datetime.now(timezone(timedelta(hours=7))).strftime('%H:%M:%S - %d/%m/%Y')}"
+      )
       await context.bot.send_message(
           chat_id=ADMIN_TELEGRAM_ID, text=admin_report, parse_mode="Markdown"
       )
