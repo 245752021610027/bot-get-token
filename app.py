@@ -828,13 +828,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
     )
     try:
-      admin_report = (
-          f"🚀 **THÔNG BÁO UP LOCKET THÀNH CÔNG**\n\n👤 Người thực hiện:"
-          f" {user_display} (`{user_id}`)\n🎯 Target Username:"
-          f" `@{locket_username}`\n⏰ Thời gian:"
-          f" {datetime.now(timezone(timedelta(hours=7))).strftime('%H:%M:%S -"
-          f" %d/%m/%Y')}"
-      )
+  admin_report = (
+        f"🚀 **THÔNG BÁO UP LOCKET THÀNH CÔNG**\n\n"
+        f"👤 Người thực hiện: {user_display} (`{user_id}`)\n"
+        f"🎯 Target Username: `@{locket_username}`\n"
+        f"⏰ Thời gian: {datetime.now(timezone(timedelta(hours=7))).strftime('%H:%M:%S - %d/%m/%Y')}"
+    )
       await context.bot.send_message(
           chat_id=ADMIN_TELEGRAM_ID, text=admin_report, parse_mode="Markdown"
       )
