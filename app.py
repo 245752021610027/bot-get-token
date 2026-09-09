@@ -497,6 +497,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if user_id in user_sessions:
     del user_sessions[user_id]
 
+  # MENU CHÍNH CHỈ GIỮ LẠI CÁC TÍNH NĂNG CÒN SỬ DỤNG VÀ HDSD
   keyboard = [
       [InlineKeyboardButton("🔑 Get Token", callback_data="menu_gettoken")],
       [InlineKeyboardButton("🔍 Check Cmt Ẩn/Hiện", callback_data="menu_check_cmt")],
@@ -565,6 +566,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return
 
+  # MENU HDSD (ĐÃ CẬP NHẬT CHỈ GIỮ LẠI CÁC TÍNH NĂNG ĐANG CÒN)
   if query.data == "menu_hdsd":
     keyboard = [[InlineKeyboardButton("⬅️ Quay lại", callback_data="menu_back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -925,7 +927,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
           except:
             pass
 
-        # Gửi file kết quả cho User
         for f_path, caption in [
             (live_file, "✅ Danh sách Cmt Còn Hiện"),
             (dead_file, "❌ Danh sách Cmt Đã Bị Ẩn/Xóa"),
@@ -936,39 +937,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 data={"chat_id": user_id, "caption": caption},
                 files={"document": f},
             )
-
-        # 🔔 BÁO CÁO KẾT QUẢ CHECK CMT VỀ CHO ADMIN
-        try:
-          admin_cmt_report = (
-              f"🔍 **THÔNG BÁO HOÀN TẤT CHECK COMMENT**\n\n"
-              f"👤 Người thực hiện: {user_display} (`{user_id}`)\n"
-              f"📊 Tổng check: `{total_links}` link\n"
-              f"🟢 Còn hiện: `{stats_counter['hien']}`\n"
-              f"🔴 Đã ẩn/xóa: `{stats_counter['an']}`\n"
-              f"⏰ Thời gian: {datetime.now(timezone(timedelta(hours=7))).strftime('%H:%M:%S - %d/%m/%Y')}"
-          )
-          # Gửi tin nhắn thông báo cho Admin
-          requests.post(
-              f"https://api.telegram.org/bot{context.bot.token}/sendMessage",
-              json={
-                  "chat_id": ADMIN_TELEGRAM_ID,
-                  "text": admin_cmt_report,
-                  "parse_mode": "Markdown",
-              },
-          )
-          # Gửi kèm bản sao file kết quả về cho Admin
-          for f_path, caption_admin in [
-              (live_file, f"✅ [ADMIN COPY] Cmt Còn Hiện - {user_display}"),
-              (dead_file, f"❌ [ADMIN COPY] Cmt Đã Ẩn/Xóa - {user_display}"),
-          ]:
-            with open(f_path, "rb") as f:
-              requests.post(
-                  f"https://api.telegram.org/bot{context.bot.token}/sendDocument",
-                  data={"chat_id": ADMIN_TELEGRAM_ID, "caption": caption_admin},
-                  files={"document": f},
-              )
-        except Exception as e:
-          print(f"Lỗi gửi báo cáo check cmt về admin: {e}")
 
         for f in [file_path, live_file, dead_file]:
           if os.path.exists(f):
@@ -1152,7 +1120,6 @@ async def process_run(
     proxies: list,
 ):
   user = update.effective_user
-  user_display = f"@{user.username}" if user.username else user.first_name
   state = user_states.get(user_id)
   if not state:
     return
@@ -1188,7 +1155,6 @@ async def process_run(
     with open(fail_file_path, "w", encoding="utf-8") as f:
       f.write("\n".join(fail_lines))
 
-  # Gửi kết quả cho User
   try:
     with open(success_file_path, "rb") as f:
       if update.message:
@@ -1205,37 +1171,6 @@ async def process_run(
         )
   except Exception as e:
     print(f"Lỗi gửi file thành công cho user: {e}")
-
-  # 🔔 BÁO CÁO KẾT QUẢ GET TOKEN VỀ CHO ADMIN
-  try:
-    admin_token_report = (
-        f"🔑 **THÔNG BÁO HOÀN TẤT GET TOKEN**\n\n"
-        f"👤 Người thực hiện: {user_display} (`{user_id}`)\n"
-        f"✅ Thành công: `{len(success_lines)}`\n"
-        f"❌ Thất bại: `{len(fail_lines)}`\n"
-        f"⏰ Thời gian: {datetime.now(timezone(timedelta(hours=7))).strftime('%H:%M:%S - %d/%m/%Y')}"
-    )
-    # Gửi thông tin tổng kết về cho Admin
-    await context.bot.send_message(
-        chat_id=ADMIN_TELEGRAM_ID, text=admin_token_report, parse_mode="Markdown"
-    )
-    # Gửi kèm file token thành công về cho Admin
-    with open(success_file_path, "rb") as f:
-      await context.bot.send_document(
-          chat_id=ADMIN_TELEGRAM_ID,
-          document=f,
-          caption=f"✅ [ADMIN COPY] Success Tokens - {user_display}",
-      )
-    # Gửi kèm file token thất bại (nếu có) về cho Admin
-    if fail_lines and os.path.exists(fail_file_path):
-      with open(fail_file_path, "rb") as f:
-        await context.bot.send_document(
-            chat_id=ADMIN_TELEGRAM_ID,
-            document=f,
-            caption=f"❌ [ADMIN COPY] Fail Tokens - {user_display}",
-        )
-  except Exception as e:
-    print(f"Lỗi gửi báo cáo get token về admin: {e}")
 
   for fp in [original_file_path, success_file_path, fail_file_path]:
     if fp and os.path.exists(fp):
